@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <!doctype html>
 <meta charset="utf-8">
 <title>シート読み取りビューア</title>
@@ -142,3 +143,114 @@ function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
 </script>
+=======
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ChatGPT 質問テンプレ集</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f9f9f9;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    details {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      margin: 10px 0;
+      padding: 10px;
+    }
+    summary {
+      font-weight: bold;
+      cursor: pointer;
+      padding: 5px;
+      outline: none;
+    }
+    .template {
+      margin: 10px 0;
+      padding: 10px;
+      border-left: 3px solid #2196F3;
+      background: #f1f8ff;
+    }
+    .title {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .copy-btn {
+      margin-top: 5px;
+      padding: 4px 8px;
+      font-size: 12px;
+      border: none;
+      background: #2196F3;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .copy-btn:hover {
+      background: #1976d2;
+    }
+  </style>
+</head>
+<body>
+  <h1>💡 ChatGPT 質問テンプレ集</h1>
+  <div id="container"></div>
+
+  <script>
+    // templates.json を読み込む
+    fetch("templates.json")
+      .then(res => res.json())
+      .then(data => {
+        const grouped = {};
+        // カテゴリごとにまとめる
+        data.forEach(t => {
+          if (!grouped[t.category]) grouped[t.category] = [];
+          grouped[t.category].push(t);
+        });
+
+        const container = document.getElementById("container");
+        for (const cat in grouped) {
+          const details = document.createElement("details");
+          const summary = document.createElement("summary");
+          summary.textContent = cat;
+          details.appendChild(summary);
+
+          grouped[cat].forEach(t => {
+            const div = document.createElement("div");
+            div.className = "template";
+
+            const title = document.createElement("div");
+            title.className = "title";
+            title.textContent = t.title;
+
+            const body = document.createElement("pre");
+            body.textContent = t.body;
+
+            const btn = document.createElement("button");
+            btn.className = "copy-btn";
+            btn.textContent = "コピー";
+            btn.onclick = () => {
+              navigator.clipboard.writeText(t.body);
+              btn.textContent = "✅ コピー済み";
+              setTimeout(() => btn.textContent = "コピー", 1500);
+            };
+
+            div.appendChild(title);
+            div.appendChild(body);
+            div.appendChild(btn);
+            details.appendChild(div);
+          });
+
+          container.appendChild(details);
+        }
+      });
+  </script>
+</body>
+</html>
+>>>>>>> 8f3af2d6cd0a11a0e0e8453367def26a4f489d6f
