@@ -1,0 +1,144 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>シート読み取りビューア</title>
+<style>
+  body{font-family:system-ui, sans-serif; margin:24px; line-height:1.6}
+  .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+  input,button{padding:8px 10px; font-size:14px}
+  table{border-collapse:collapse; width:100%; margin-top:14px}
+  th,td{border:1px solid #ddd; padding:8px; font-size:14px}
+  th{background:#f5f7fa; text-align:left}
+  pre{white-space:pre-wrap; background:#f8fafc; border:1px solid #eee; padding:10px}
+
+  /* 追加: 本文などの改行をそのまま表示＆長文でも折り返し */
+  td{ white-space: pre-line; vertical-align: top; overflow-wrap: anywhere; }
+</style>
+
+<h1>スプレッドシート読み取り</h1>
+
+<div class="row">
+  <label>APP_URL:
+    <!-- /dev ではなく /exec を推奨 -->
+    <input id="app" size="60" placeholder="https://script.google.com/macros/s/AKfycbxCrFgnc0WXv7SwXUZM7F2MMU1wVVjQgjdRbB6EUI4xk9ffzlPwwur_eyd0cPnKpRfn/exec">
+  </label>
+  <label>シート（タブ）:
+    <input id="sheet" placeholder="例：シート1（URLもOK）">
+  </label>
+  <label>範囲:
+    <input id="range" value="A1:Z999">
+  </label>
+  <button id="load">取得</button>
+</div>
+
+<div id="status" style="margin-top:10px; color:#667085"></div>
+<div id="error" style="color:#b00020; margin-top:6px"></div>
+<div id="table"></div>
+<details style="margin-top:10px">
+  <summary>生JSON</summary>
+  <pre id="raw">-</pre>
+</details>
+
+<script>
+document.getElementById('load').addEventListener('click', load);
+
+async function load(){
+  const app   = document.getElementById('app').value.trim();
+  const sheet = document.getElementById('sheet').value.trim();
+  const range = document.getElementById('range').value.trim();
+  const status = document.getElementById('status');
+  const error  = document.getElementById('error');
+  const table  = document.getElementById('table');
+  const raw    = document.getElementById('raw');
+
+  error.textContent = '';
+  table.innerHTML = '';
+  raw.textContent = '-';
+
+  if(!app){
+    error.textContent = 'APP_URL（/exec）を入力してください';
+    return;
+  }
+  if(/\/dev\/?$/.test(app)){
+    status.textContent = '注意: /dev はログインが必要で失敗しがちです。/exec を使ってください。';
+  }
+
+  let url;
+  try{
+    url = new URL(app);
+  }catch{
+    error.textContent = 'APP_URL が不正です（https://…/exec を指定）';
+    return;
+  }
+  url.searchParams.set('range', range || 'A1:Z999');
+
+  // 「シート」入力が URL or gid or 名前のいずれでもOKにする
+  if (sheet) {
+    const urlLike = /^https?:\/\//.test(sheet);
+    const gidMatch = sheet.match(/[?&]gid=(\d+)/);
+    if (gidMatch) {
+      url.searchParams.set('gid', gidMatch[1]); // URL中のgidを採用
+    } else if (!urlLike && /^\d+$/.test(sheet)) {
+      url.searchParams.set('gid', sheet);       // 数字だけならgid
+    } else if (!urlLike) {
+      url.searchParams.set('sheet', sheet);     // それ以外はタブ名
+    } else {
+      status.textContent = 'URLに gid が無い場合は、タブ名を指定してください。';
+    }
+  }
+
+  status.textContent = '読み込み中…';
+
+  try{
+    const json = await fetchJson(url.toString());
+    render(json);
+  }catch(e1){
+    try{ const json = await jsonpFetch(url); render(json); }
+    catch(e2){ status.textContent = ''; error.textContent = 'エラー: ' + (e2.message || e2 || e1.message || e1); }
+  }
+
+  function render(json){
+    raw.textContent = JSON.stringify(json, null, 2);
+    if(json.error){ throw new Error(json.error); }
+
+    const items = Array.isArray(json.items) ? json.items : [];
+    status.textContent = `取得: ${json.count ?? items.length} 行（sheet=${json.sheet ?? '-'} / range=${json.range ?? '-' }）`;
+
+    if(items.length === 0){
+      table.innerHTML = '<p>データがありません。</p>';
+      return;
+    }
+
+    const headers = Object.keys(items[0]);
+    const thead = '<thead><tr>' + headers.map(h=>`<th>${escapeHtml(h)}</th>`).join('') + '</tr></thead>';
+    const rows  = items.map(obj => '<tr>' + headers.map(h => `<td>${escapeHtml(obj[h] ?? '')}</td>`).join('') + '</tr>').join('');
+    table.innerHTML = `<table>${thead}<tbody>${rows}</tbody></table>`;
+  }
+}
+
+async function fetchJson(u){
+  const res = await fetch(u, { cache:'no-store', mode:'cors', credentials:'omit' });
+  const ct  = (res.headers.get('content-type')||'').toLowerCase();
+  const text = await res.text();
+  if(!res.ok) throw new Error(res.status + ' ' + res.statusText + ' / ' + text.slice(0,200));
+  if(!ct.includes('application/json')) throw new Error('JSON以外の応答: ' + ct + ' / ' + text.slice(0,120));
+  return JSON.parse(text);
+}
+
+function jsonpFetch(urlObj){
+  return new Promise((resolve, reject) => {
+    const cb = '__jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random()*1e6);
+    urlObj.searchParams.set('callback', cb);
+    const timer = setTimeout(() => { cleanup(); reject(new Error('JSONPタイムアウト')); }, 15000);
+    function cleanup(){ clearTimeout(timer); delete window[cb]; if (script && script.parentNode) script.parentNode.removeChild(script); }
+    window[cb] = data => { cleanup(); resolve(data); };
+    const script = document.createElement('script');
+    script.src = urlObj.toString();
+    script.onerror = () => { cleanup(); reject(new Error('JSONP読込失敗')); };
+    document.head.appendChild(script);
+  });
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+</script>
