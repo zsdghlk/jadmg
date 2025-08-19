@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>YouTube 全件取得 → 素データ出力（CSV/TSV）</title>
+<title>YouTube 全件取得 → 素データ（TSV）</title>
 <style>
   :root{
     --bg:#0b0b0c; --panel:#121316; --text:#f2f3f5; --muted:#9aa0a6; --bd:#1f2126;
@@ -30,18 +30,15 @@
   input::placeholder,textarea::placeholder{color:color-mix(in oklab,var(--muted) 80%,transparent)}
   textarea{min-height:260px}
   .btn{background:var(--accent);border-color:transparent;color:#fff;font-weight:700;cursor:pointer}
-  .btn.secondary{background:transparent;color:var(--accent);border:1px solid var(--accent)}
   .toggle{display:flex;border:1px solid var(--bd);border-radius:12px;overflow:hidden}
   .toggle>button{flex:1;padding:10px;border:0;background:transparent;color:var(--muted);font-weight:700;cursor:pointer}
   .toggle>button.active{background:var(--accent);color:#fff}
   a{color:var(--accent-2)}
-  .stat{display:flex;gap:10px;flex-wrap:wrap}
   .badge{border:1px solid var(--bd);border-radius:999px;padding:.3em .7em}
-  .sticky{position:sticky;bottom:0;z-index:10;background:linear-gradient(180deg, color-mix(in oklab, var(--panel) 70%, transparent), var(--panel));border:1px solid var(--bd);border-radius:14px;padding:10px;margin-top:10px;display:flex;gap:10px;justify-content:space-between;align-items:center}
 </style>
 
 <div class="wrap">
-  <h1>YouTube 全件取得 → 素データ出力（CSV/TSV）</h1>
+  <h1>YouTube 全件取得 → 素データ（TSV）</h1>
 
   <!-- 接続方法 -->
   <div class="panel">
@@ -106,29 +103,12 @@
       <div id="chTitle" style="font-weight:800"></div>
       <div id="countBadge" class="badge">0 件</div>
     </div>
-    <div id="chStats" class="stat muted" style="margin-top:6px"></div>
+    <div id="chStats" class="row muted" style="gap:8px;margin-top:6px"></div>
   </div>
 
-  <!-- 出力 -->
+  <!-- 出力（TSVのみ） -->
   <div class="panel">
-    <div class="row">
-      <div style="flex:1 1 180px">
-        <label>出力形式</label>
-        <select id="fmt">
-          <option value="csv" selected>CSV（,）</option>
-          <option value="tsv">TSV（タブ）</option>
-        </select>
-      </div>
-      <div class="row" style="flex:2 1 280px; justify-content:flex-end">
-        <button id="copy" class="btn">コピー</button>
-        <button id="dl" class="btn secondary">ダウンロード</button>
-      </div>
-    </div>
-    <textarea id="out" placeholder="ここにCSV/TSVが出力されます"></textarea>
-    <div class="sticky">
-      <div class="muted">※ タイトルとURL、視聴回数/高評価/コメント/平均/日/公開日/ID を列で出力します</div>
-      <div><span id="countBottom" class="badge">0 件</span></div>
-    </div>
+    <textarea id="out" placeholder="ここにTSV（タブ区切り）が出力されます&#10;列: url, title, viewCount, likeCount, commentCount, avgPerDay, publishedAt, videoId"></textarea>
   </div>
 </div>
 
@@ -150,12 +130,8 @@ const chPanel    = document.getElementById('chPanel');
 const chTitle    = document.getElementById('chTitle');
 const chStats    = document.getElementById('chStats');
 const countBadge = document.getElementById('countBadge');
-const countBottom= document.getElementById('countBottom');
 
-const fmtSel     = document.getElementById('fmt');
 const outTA      = document.getElementById('out');
-const copyBtn    = document.getElementById('copy');
-const dlBtn      = document.getElementById('dl');
 
 /* ====== ローカル保存 ====== */
 apiKeyIn.value = localStorage.getItem('yt_api_key') || '';
@@ -199,7 +175,6 @@ runBtn.onclick = async () => {
       ({rows, channel} = await runViaClient(key, raw));
     }
 
-    // 整形後並び替え
     rows = sortAfter(rows, postSort.value);
 
     lastRows = rows;
@@ -213,14 +188,12 @@ runBtn.onclick = async () => {
   }finally{ busy(false); }
 };
 
-/* ====== 並び替えだけ残す ====== */
+/* ====== 並び替え ====== */
 postSort.addEventListener('change', ()=>{
   if (!lastRows.length){ clearOutput(); return; }
   const rows = sortAfter([...lastRows], postSort.value);
   renderOutput(rows, lastChannel);
 });
-
-/* ====== 並び替え実装 ====== */
 function sortAfter(rows, key){
   const byNum = (field, asc=true)=>(a,b)=>{
     const av=Number(a[field]), bv=Number(b[field]);
@@ -244,9 +217,8 @@ function sortAfter(rows, key){
   }
 }
 
-/* ====== 出力（CSV/TSV のみ） ====== */
+/* ====== 出力（TSV固定） ====== */
 function renderOutput(rows, channel){
-  // 追加派生：平均/日
   const now = Date.now();
   rows = rows.map(r=>{
     const t = new Date(r.publishedAt||0).getTime();
@@ -256,7 +228,6 @@ function renderOutput(rows, channel){
     return {...r, __avgPerDay: avg};
   });
 
-  // 見出し・統計表示
   if (channel){
     chPanel.style.display = '';
     chTitle.innerHTML = `<a href="${channel.url}" target="_blank" rel="noopener">${esc(channel.title||'')}</a>`;
@@ -269,18 +240,11 @@ function renderOutput(rows, channel){
     chPanel.style.display = 'none';
   }
 
-  // CSV/TSV
-  const sep = (fmtSel.value==='tsv') ? '\t' : ',';
-  const escCsv = s=>{
-    s = String(s ?? '');
-    if (sep===',' && /[",\n]/.test(s)) s = `"${s.replace(/"/g,'""')}"`;
-    return s;
-  };
-  const header = ['No','url','title','viewCount','likeCount','commentCount','avgPerDay','publishedAt','videoId'];
+  const sep = '\t';
+  const header = ['url','title','viewCount','likeCount','commentCount','avgPerDay','publishedAt','videoId'];
   const lines = [ header.join(sep) ];
-  rows.forEach((r,i)=>{
+  rows.forEach(r=>{
     lines.push([
-      String(i+1),
       r.url||'',
       r.title||'',
       r.viewCount ?? '',
@@ -289,23 +253,17 @@ function renderOutput(rows, channel){
       r.__avgPerDay ?? '',
       r.publishedAt||'',
       r.videoId||''
-    ].map(escCsv).join(sep));
+    ].join(sep));
   });
   outTA.value = lines.join('\n');
 
   setCount(rows.length);
 }
-function setCount(n){
-  countBadge.textContent = `${n} 件`;
-  countBottom.textContent = `${n} 件`;
-}
-function clearOutput(){
-  outTA.value=''; setCount(0); chPanel.style.display='none';
-}
+function setCount(n){ countBadge.textContent = `${n} 件`; }
+function clearOutput(){ outTA.value=''; setCount(0); chPanel.style.display='none'; }
 
 /* ====== API直呼び or GAS経由 ====== */
 async function runViaClient(key, raw){
-  // 1) 判定 → channelId / playlistId / videoId
   const type = detectInputType(raw);
   if (type.kind==='playlist'){
     const vids = await listPlaylistVideoIds(type.playlistId, key, Infinity);
@@ -313,10 +271,10 @@ async function runViaClient(key, raw){
     const rows = vids.map((id,i)=> toRowFromDetail(details.get(id), id, i));
     return { rows, channel:null };
   }
-  // channel もしくは video → channelId 決定
   let channelId = null;
   if (type.kind==='channel') channelId = type.channelId;
   if (type.kind==='video')   channelId = await getChannelIdFromVideo(type.videoId, key);
+  if (!channelId) channelId = await resolveChannelByQuery(type, key);
   if (!channelId) throw new Error('チャンネルIDを解決できませんでした');
 
   const [uploads, channel] = await Promise.all([
@@ -330,16 +288,14 @@ async function runViaClient(key, raw){
   const rows = videoIds.map((id,i)=> toRowFromDetail(details.get(id), id, i));
   return { rows, channel };
 }
-
 async function runViaGAS(appUrl, raw){
   const url = new URL(appUrl);
-  // 入力タイプに応じてクエリ
   const type = detectInputType(raw);
   if (type.kind==='playlist'){
     url.searchParams.set('playlistId', type.playlistId);
   }else{
     if (type.kind==='channel') url.searchParams.set('channelId', type.channelId);
-    else url.searchParams.set('channel', raw); // video/その他 → サーバで解決
+    else url.searchParams.set('channel', raw);
   }
   const json = await fetchJsonWithJsonp(url);
   if (!json || json.ok===false) throw new Error(json?.error || 'GAS応答エラー');
@@ -370,14 +326,8 @@ async function runViaGAS(appUrl, raw){
 function detectInputType(raw){
   const s = String(raw||'').trim();
   if (!s) return {kind:'unknown'};
-
-  // UCID
   if (/^UC[0-9A-Za-z_-]{22}$/.test(s)) return {kind:'channel', channelId:s};
-
-  // @handle
-  if (s.startsWith('@')) return {kind:'channelQuery'}; // 後段で解決
-
-  // URL?
+  if (s.startsWith('@')) return {kind:'channelQuery', q:s.slice(1)};
   if (/^https?:\/\//i.test(s)){
     try{
       const u = new URL(s);
@@ -385,7 +335,6 @@ function detectInputType(raw){
       const parts = u.pathname.replace(/\/+$/,'').split('/').filter(Boolean);
       const vid = u.searchParams.get('v') || (['shorts','embed','live'].includes(parts[0])? parts[1] : null);
       const list= u.searchParams.get('list');
-
       if (host==='youtu.be' && parts[0]) return {kind:'video', videoId: parts[0].slice(0,11)};
       if (vid) return {kind:'video', videoId: vid.slice(0,11)};
       if (list) return {kind:'playlist', playlistId: list};
@@ -397,21 +346,20 @@ function detectInputType(raw){
       if (mCustom) return {kind:'channelQuery', q:mCustom[2]};
     }catch{}
   }
-
-  // 11桁 → 動画IDの可能性
   if (/^[0-9A-Za-z_-]{11}$/.test(s)) return {kind:'video', videoId:s};
-
-  // それ以外 → 検索でチャンネル解決
   return {kind:'channelQuery', q:s};
 }
+async function resolveChannelByQuery(type, key){
+  if (type.kind==='channelQuery' && type.q) return await searchChannelIdByQuery(type.q, key);
+  return null;
+}
 
-/* ====== 直APIユーティリティ ====== */
+/* ====== 共通ユーティリティ ====== */
 function getKeyOrThrow(){ const k=apiKeyIn.value.trim(); if(!k) throw new Error('APIキーを入力してください'); return k; }
 function busy(b,msg){ statusEl.textContent = b ? (msg||'取得中…') : ''; }
 function toast(msg){ statusEl.textContent = msg; setTimeout(()=> statusEl.textContent='', 1600); }
 
 async function fetchJsonWithJsonp(url){
-  // まずCORS JSON
   try{
     const r=await fetch(url.toString(),{cache:'no-store',mode:'cors',credentials:'omit'});
     const ct=(r.headers.get('content-type')||'').toLowerCase();
@@ -420,7 +368,6 @@ async function fetchJsonWithJsonp(url){
     if(!ct.includes('application/json')) throw new Error(`JSON以外の応答: ${ct} / ${txt.slice(0,160)}`);
     return JSON.parse(txt);
   }catch(e1){
-    // JSONP フォールバック
     const u=new URL(url.toString());
     return new Promise((resolve,reject)=>{
       const cb='__jsonp_cb_'+Date.now()+'_'+Math.floor(Math.random()*1e6);
@@ -434,12 +381,10 @@ async function fetchJsonWithJsonp(url){
     });
   }
 }
-
 function extractIdFromUrl(u){
   const m=String(u||'').match(/v=([0-9A-Za-z_-]{11})|youtu\.be\/([0-9A-Za-z_-]{11})|shorts\/([0-9A-Za-z_-]{11})/);
   return (m && (m[1]||m[2]||m[3])) || '';
 }
-
 function toRowFromDetail(d,id,i){
   return {
     url: `https://www.youtube.com/watch?v=${id}`,
@@ -452,22 +397,16 @@ function toRowFromDetail(d,id,i){
     __idx: i
   };
 }
-
 async function fetchChannelInfo(channelId, key){
   const ep=new URL('https://www.googleapis.com/youtube/v3/channels');
   ep.searchParams.set('part','snippet,statistics'); ep.searchParams.set('id',channelId); ep.searchParams.set('key',key);
   const r=await fetch(ep); await assertOk(r,'channels(stats) API'); const j=await r.json();
   const it=j.items?.[0]; if(!it) return null; const sn=it.snippet||{}, st=it.statistics||{};
-  return {
-    id:it.id,
-    title:sn.title||'',
-    url:`https://www.youtube.com/channel/${it.id}`,
+  return { id:it.id, title:sn.title||'', url:`https://www.youtube.com/channel/${it.id}`,
     subscriberCount: st.subscriberCount!=null? Number(st.subscriberCount):null,
     viewCount: st.viewCount!=null? Number(st.viewCount):null,
-    videoCount: st.videoCount!=null? Number(st.videoCount):null
-  };
+    videoCount: st.videoCount!=null? Number(st.videoCount):null };
 }
-
 async function getChannelIdFromVideo(videoId,key){
   const ep=new URL('https://www.googleapis.com/youtube/v3/videos');
   ep.searchParams.set('part','snippet'); ep.searchParams.set('id',videoId); ep.searchParams.set('key',key);
@@ -479,19 +418,6 @@ async function getUploadsPlaylistId(channelId,key){
   ep.searchParams.set('part','contentDetails'); ep.searchParams.set('id',channelId); ep.searchParams.set('key',key);
   const r=await fetch(ep); await assertOk(r,'channels API'); const j=await r.json();
   return j.items?.[0]?.contentDetails?.relatedPlaylists?.uploads || null;
-}
-async function getChannelIdFromPlaylist(playlistId, key){
-  const ep=new URL('https://www.googleapis.com/youtube/v3/playlists');
-  ep.searchParams.set('part','snippet'); ep.searchParams.set('id',playlistId); ep.searchParams.set('key',key);
-  const r=await fetch(ep); await assertOk(r,'playlists API'); const j=await r.json();
-  return j.items?.[0]?.snippet?.channelId || null;
-}
-async function searchChannelIdByHandle(handle,key){
-  const ep=new URL('https://www.googleapis.com/youtube/v3/search');
-  ep.searchParams.set('part','snippet'); ep.searchParams.set('type','channel'); ep.searchParams.set('q',handle);
-  ep.searchParams.set('maxResults','1'); ep.searchParams.set('key',key);
-  const r=await fetch(ep); await assertOk(r,'search(handle) API'); const j=await r.json();
-  return j.items?.[0]?.id?.channelId || null;
 }
 async function searchChannelIdByQuery(query,key){
   const ep=new URL('https://www.googleapis.com/youtube/v3/search');
@@ -542,7 +468,6 @@ function validateExecUrlOrThrow(s){
   if(!m) throw new Error('GASの APP_URL（/exec）を正しく入力してください');
   return m[0];
 }
-function fetchJson(u){ return fetch(u).then(r=>r.json()); }
 function esc(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function fmtNum(n,u=''){ return (n==null||isNaN(n))? '-': Number(n).toLocaleString('ja-JP')+u; }
 </script>
