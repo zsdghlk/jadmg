@@ -71,6 +71,10 @@ runBtn.onclick = async () => {
     if (!uploads) throw new Error('アップロード済みプレイリストが見つかりませんでした');
 
     const videoIds = await listPlaylistVideoIds(uploads, key, max);
+
+　　
+
+    
     const urls = videoIds.map(id => `https://www.youtube.com/watch?v=${id}`);
     outTA.value = urls.join('\n');
     flash(`${urls.length}件のリンクを取得`);
@@ -248,6 +252,23 @@ async function listPlaylistVideoIds(playlistId, key, maxCount) {
   }
   return ids;
 }
+// 取得したIDで詳細情報をまとめ取り
+const detailsMap = await fetchVideosDetails(videoIds, key);
+
+// 出力：URL<TAB>視聴回数<TAB>タイトル（1行1本）
+const lines = videoIds.map(id => {
+  const d = detailsMap.get(id) || {};
+  const url = `https://www.youtube.com/watch?v=${id}`;
+  const views = (d.viewCount != null) ? Number(d.viewCount).toLocaleString('ja-JP') : '';
+  const title = d.title || '';
+  return `${url}\t${views}\t${title}`;
+});
+outTA.value = lines.join('\n');
+flash(`${videoIds.length}件のリンク＋視聴回数＋タイトルを取得`);
+
+
+
+  
 
 // --- 共通: エラー本文を拾って見やすく ---
 async function assertOk_(res, label){
