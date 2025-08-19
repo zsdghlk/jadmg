@@ -1,185 +1,263 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <title>YouTube Channel Info Fetcher</title>
-  <style>
-    /* シンプルなスタイル */
-    body { font-family: sans-serif; padding: 20px; }
-    input { width: 400px; padding: 5px; margin-bottom: 10px; }
-    button { padding: 5px 15px; }
-    pre { background-color: #f4f4f4; padding: 15px; border: 1px solid #ddd; white-space: pre-wrap; word-wrap: break-word; }
-  </style>
-</head>
-<body>
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>YouTube リンク収集（テキスト出力）</title>
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans JP",sans-serif;margin:24px;line-height:1.7}
+  h1{font-size:1.2rem;margin:0 0 12px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0}
+  input,button{padding:8px}
+  input[type="number"]{width:120px}
+  textarea{width:100%;min-height:220px;padding:10px}
+  .muted{color:#6b7280}
+</style>
 
-  <h1>YouTube情報取得ツール</h1>
+<h1>YouTube リンクをテキストで取得</h1>
+<script>
+// 追加
+const DEFAULT_API_KEY = 'AIzaSyAsoGsbekSs5kfzjfIdxmuOdo44hwDqq3g';
+</script>
+<div class="row">
+  <label>APIキー：</label>
+  <input id="apiKey" placeholder="YouTube Data API v3 の APIキー" style="min-width:260px;flex:1">
+  <button id="saveKey">保存</button>
+  <span class="muted">（ローカル保存）</span>
+</div>
 
-  <div>
-    <label for="apiKey">YouTube APIキー:</label><br>
-    <input type="password" id="apiKey" placeholder="AIzaSyAsoGsbekSs5kfzjfIdxmuOdo44hwDqq3g">
-  </div>
+<div class="row">
+  <label>チャンネル：</label>
+  <input id="channel" placeholder="@handle / UCxxxxxxxxxxxxxxxxxxxxxx / https://www.youtube.com/@handle など" style="min-width:320px;flex:1">
+</div>
 
-  <div>
-    <label for="channelInput">チャンネルURL / @ハンドル / 動画URLなど:</label><br>
-    <input type="text" id="channelInput" placeholder="@handle or https://www.youtube.com/watch?v=...">
-  </div>
+<div class="row">
+  <label>最大件数：</label>
+  <input id="limit" type="number" value="200" min="1" max="5000">
+  <button id="run">取得</button>
+  <span id="status" class="muted"></span>
+</div>
 
-  <button id="fetchButton">チャンネルIDを解決して動画一覧を取得</button>
-  <hr>
+<p class="muted">出力（1行=1リンク）</p>
+<textarea id="out" placeholder="ここに動画URLが改行区切りで出ます"></textarea>
 
-  <h2>結果:</h2>
-  <pre id="result">ここに結果が表示されます</pre>
+<script>
+const apiKeyInput = document.getElementById('apiKey');
+const channelInput = document.getElementById('channel');
+const limitInput   = document.getElementById('limit');
+const runBtn       = document.getElementById('run');
+const outTA        = document.getElementById('out');
+const statusEl     = document.getElementById('status');
 
-  <script>
-    // ========== ここからがJavaScript部分です ==========
+// --- 保存/復元 ---
+apiKeyInput.value = localStorage.getItem('yt_api_key') || '';
+document.getElementById('saveKey').onclick = () => {
+  localStorage.setItem('yt_api_key', apiKeyInput.value.trim());
+  flash('APIキーを保存しました');
+};
 
-    // UI要素を取得
-    const apiKeyInput = document.getElementById('apiKey');
-    const channelInput = document.getElementById('channelInput');
-    const fetchButton = document.getElementById('fetchButton');
-    const resultArea = document.getElementById('result');
+// --- 実行 ---
+runBtn.onclick = async () => {
+  const key = apiKeyInput.value.trim();
+  const raw = channelInput.value.trim();
+  const max = Math.max(1, Math.min(5000, Number(limitInput.value) || 200));
+  if (!key) return alert('APIキーを入力してください');
+  if (!raw) return alert('チャンネルを入力してください');
 
-    // バックエンドのGASウェブアプリURL
-    const GAS_APP_URL = 'ここにあなたのGASの/exec URLを貼り付け';
+  try {
+    setBusy(true);
+    const channelId = await resolveChannelIdSmart(raw, key);
+    if (!channelId) throw new Error('チャンネルIDを解決できませんでした');
 
-    // ボタンがクリックされたときの処理
-    fetchButton.addEventListener('click', async () => {
-      const key = apiKeyInput.value.trim();
-      const input = channelInput.value.trim();
+    const uploads = await getUploadsPlaylistId(channelId, key);
+    if (!uploads) throw new Error('アップロード済みプレイリストが見つかりませんでした');
 
-      if (!key || !input) {
-        resultArea.textContent = 'APIキーとチャンネル情報を両方入力してください。';
-        return;
-      }
-      
-      resultArea.textContent = '処理中...';
+    const videoIds = await listPlaylistVideoIds(uploads, key, max);
+    const urls = videoIds.map(id => `https://www.youtube.com/watch?v=${id}`);
+    outTA.value = urls.join('\n');
+    flash(`${urls.length}件のリンクを取得`);
+  } catch (e) {
+    console.error(e);
+    // APIエラー本文があれば見せる
+    alert('エラー: ' + (e.message || e));
+  } finally {
+    setBusy(false);
+  }
+};
 
-      try {
-        // 1. フロントエンドでチャンネルIDを解決
-        const channelId = await resolveChannelIdSmart(input, key);
-        
-        if (!channelId) {
-          resultArea.textContent = 'チャンネルIDを解決できませんでした。入力内容を確認してください。';
-          return;
-        }
+// =======================================================
+//  チャンネルID 解決（@/UC/URL/動画/shorts/PL 全対応 & URL時だけ new URL）
+// =======================================================
+function looksLikeUrl(s){ return /^https?:\/\//i.test(String(s||'')); }
 
-        resultArea.textContent = `チャンネルID: ${channelId} を取得しました。\n最新の動画一覧を取得中...`;
+async function resolveChannelIdSmart(input, key) {
+  const raw = String(input||'').trim();
+  if (!raw) return null;
 
-        // 2. 解決したチャンネルIDを使ってバックエンドに動画一覧をリクエスト
-        const backendUrl = new URL(GAS_APP_URL);
-        backendUrl.searchParams.set('channelId', channelId);
-        backendUrl.searchParams.set('max', 10); // 取得する動画数
+  // 既にUC…なら即返す
+  if (/^UC[0-9A-Za-z_-]{22}$/.test(raw)) return raw;
 
-        const response = await fetch(backendUrl);
-        if (!response.ok) {
-            throw new Error(`バックエンドからの応答エラー: ${response.statusText}`);
-        }
-        const data = await response.json();
+  // 11桁 → 動画IDの可能性
+  if (/^[0-9A-Za-z_-]{11}$/.test(raw)) {
+    const cid = await getChannelIdFromVideo(raw, key);
+    if (cid) return cid;
+  }
 
-        // 3. 結果を表示
-        resultArea.textContent = JSON.stringify(data, null, 2);
+  // @handle
+  if (raw.startsWith('@')) {
+    const cid = await searchChannelIdByHandle(raw.slice(1), key);
+    if (cid) return cid;
+  }
 
-      } catch (error) {
-        resultArea.textContent = 'エラーが発生しました:\n' + error.message;
-      }
-    });
+  // URLのときだけ new URL を使う（Invalid URL を回避）
+  if (looksLikeUrl(raw)) {
+    try {
+      const u = new URL(raw);
+      const host = u.hostname.replace(/^www\./,'');
+      const parts = u.pathname.replace(/\/+$/,'').split('/').filter(Boolean);
 
-
-    // ▼▼▼▼▼ 以下はあなたが作成した関数群です ▼▼▼▼▼
-
-    // 入力: @handle / UC… / /channel/… / /c/… / /user/… / 動画URL / shorts URL / プレイリストURL / 11桁ID など
-    // 出力: チャンネルID（UCから始まる文字列） or null
-    async function resolveChannelIdSmart(input, key) {
-      const raw = (input || '').trim();
-      if (/^UC[0-9A-Za-z_-]{22}$/.test(raw)) return raw;
-      if (/^[0-9A-Za-z_-]{11}$/.test(raw)) {
-        const cid = await getChannelIdFromVideo(raw, key);
+      // 動画URL群 → 動画IDから逆引き
+      const vid =
+        u.searchParams.get('v') ||
+        (['shorts','embed','live'].includes(parts[0]) ? parts[1] : null);
+      if (host === 'youtu.be' && parts[0]) {
+        const cid = await getChannelIdFromVideo(parts[0].slice(0,11), key);
         if (cid) return cid;
       }
-      try {
-        const u = new URL(raw);
-        const host = u.hostname.replace(/^www\./,'');
-        const path = u.pathname.replace(/\/+$/,'');
-        const parts = path.split('/').filter(Boolean);
-        const vid = u.searchParams.get('v') || (['shorts','embed','live'].includes(parts[0]) ? parts[1] : null);
-        if (vid) {
-          const cid = await getChannelIdFromVideo(vid.slice(0,11), key);
-          if (cid) return cid;
-        }
-        const list = u.searchParams.get('list');
-        if (list) {
-          const cid = await getChannelIdFromPlaylist(list, key);
-          if (cid) return cid;
-        }
-        const mCh = path.match(/\/channel\/(UC[0-9A-Za-z_-]{22})$/);
-        if (mCh) return mCh[1];
-        const mHandle = path.match(/\/@([^/]+)$/);
-        if (mHandle) {
-          const cid = await searchChannelIdByHandle(mHandle[1], key);
-          if (cid) return cid;
-        }
-        const mCustom = path.match(/\/(c|user)\/([^/]+)$/);
-        if (mCustom) {
-          const cid = await searchChannelIdByQuery(mCustom[2], key);
-          if (cid) return cid;
-        }
-        if (host === 'youtu.be' && parts[0]) {
-          const cid = await getChannelIdFromVideo(parts[0].slice(0,11), key);
-          if (cid) return cid;
-        }
-      } catch(_) {}
-      if (raw.startsWith('@')) {
-        const cid = await searchChannelIdByHandle(raw.slice(1), key);
+      if (vid) {
+        const cid = await getChannelIdFromVideo(vid.slice(0,11), key);
         if (cid) return cid;
       }
-      return await searchChannelIdByQuery(raw, key);
-    }
-    async function getChannelIdFromVideo(videoId, key) {
-      const ep = new URL('https://www.googleapis.com/youtube/v3/videos');
-      ep.searchParams.set('part','snippet');
-      ep.searchParams.set('id', videoId);
-      ep.searchParams.set('key', key);
-      const r = await fetch(ep);
-      if (!r.ok) return null;
-      const j = await r.json();
-      return j.items?.[0]?.snippet?.channelId || null;
-    }
-    async function getChannelIdFromPlaylist(playlistId, key) {
-      const ep = new URL('https://www.googleapis.com/youtube/v3/playlists');
-      ep.searchParams.set('part','snippet');
-      ep.searchParams.set('id', playlistId);
-      ep.searchParams.set('key', key);
-      const r = await fetch(ep);
-      if (!r.ok) return null;
-      const j = await r.json();
-      return j.items?.[0]?.snippet?.channelId || null;
-    }
-    async function searchChannelIdByHandle(handle, key) {
-      const ep = new URL('https://www.googleapis.com/youtube/v3/search');
-      ep.searchParams.set('part','snippet');
-      ep.searchParams.set('type','channel');
-      ep.searchParams.set('q', handle);
-      ep.searchParams.set('maxResults','1');
-      ep.searchParams.set('key', key);
-      const r = await fetch(ep);
-      if (!r.ok) return null;
-      const j = await r.json();
-      return j.items?.[0]?.id?.channelId || null;
-    }
-    async function searchChannelIdByQuery(query, key) {
-      const ep = new URL('https://www.googleapis.com/youtube/v3/search');
-      ep.searchParams.set('part','snippet');
-      ep.searchParams.set('type','channel');
-      ep.searchParams.set('q', query);
-      ep.searchParams.set('maxResults','1');
-      ep.searchParams.set('key', key);
-      const r = await fetch(ep);
-      if (!r.ok) return null;
-      const j = await r.json();
-      return j.items?.[0]?.id?.channelId || null;
-    }
-  </script>
 
-</body>
-</html>
+      // プレイリスト → 逆引き
+      const list = u.searchParams.get('list');
+      if (list) {
+        const cid = await getChannelIdFromPlaylist(list, key);
+        if (cid) return cid;
+      }
+
+      // /channel/UC...
+      const mCh = u.pathname.match(/\/channel\/(UC[0-9A-Za-z_-]{22})$/);
+      if (mCh) return mCh[1];
+
+      // /@handle
+      const mHandle = u.pathname.match(/\/@([^/]+)$/);
+      if (mHandle) {
+        const cid = await searchChannelIdByHandle(mHandle[1], key);
+        if (cid) return cid;
+      }
+
+      // /c/ や /user/ の旧URL → 検索で解決
+      const mCustom = u.pathname.match(/\/(c|user)\/([^/]+)$/);
+      if (mCustom) {
+        const cid = await searchChannelIdByQuery(mCustom[2], key);
+        if (cid) return cid;
+      }
+    } catch {
+      // URLでなかった → 最後に検索へ
+    }
+  }
+
+  // 最後の手段：キーワード検索
+  return await searchChannelIdByQuery(raw, key);
+}
+
+// =======================================================
+//  YouTube Data API 呼び出し
+// =======================================================
+async function getChannelIdFromVideo(videoId, key) {
+  const ep = new URL('https://www.googleapis.com/youtube/v3/videos');
+  ep.searchParams.set('part','snippet');
+  ep.searchParams.set('id', videoId);
+  ep.searchParams.set('key', key);
+  const r = await fetch(ep);
+  await assertOk_(r, 'videos API');
+  const j = await r.json();
+  return j.items?.[0]?.snippet?.channelId || null;
+}
+
+async function getChannelIdFromPlaylist(playlistId, key) {
+  const ep = new URL('https://www.googleapis.com/youtube/v3/playlists');
+  ep.searchParams.set('part','snippet');
+  ep.searchParams.set('id', playlistId);
+  ep.searchParams.set('key', key);
+  const r = await fetch(ep);
+  await assertOk_(r, 'playlists API');
+  const j = await r.json();
+  return j.items?.[0]?.snippet?.channelId || null;
+}
+
+async function searchChannelIdByHandle(handle, key) {
+  const ep = new URL('https://www.googleapis.com/youtube/v3/search');
+  ep.searchParams.set('part','snippet');
+  ep.searchParams.set('type','channel');
+  ep.searchParams.set('q', handle);
+  ep.searchParams.set('maxResults','1');
+  ep.searchParams.set('key', key);
+  const r = await fetch(ep);
+  await assertOk_(r, 'search(handle) API');
+  const j = await r.json();
+  return j.items?.[0]?.id?.channelId || null;
+}
+
+async function searchChannelIdByQuery(query, key) {
+  const ep = new URL('https://www.googleapis.com/youtube/v3/search');
+  ep.searchParams.set('part','snippet');
+  ep.searchParams.set('type','channel');
+  ep.searchParams.set('q', query);
+  ep.searchParams.set('maxResults','1');
+  ep.searchParams.set('key', key);
+  const r = await fetch(ep);
+  await assertOk_(r, 'search(query) API');
+  const j = await r.json();
+  return j.items?.[0]?.id?.channelId || null;
+}
+
+async function getUploadsPlaylistId(channelId, key) {
+  const ep = new URL('https://www.googleapis.com/youtube/v3/channels');
+  ep.searchParams.set('part', 'contentDetails');
+  ep.searchParams.set('id', channelId);
+  ep.searchParams.set('key', key);
+  const r = await fetch(ep);
+  await assertOk_(r, 'channels API');
+  const j = await r.json();
+  return j.items?.[0]?.contentDetails?.relatedPlaylists?.uploads || null;
+}
+
+async function listPlaylistVideoIds(playlistId, key, maxCount) {
+  let ids = [];
+  let pageToken = '';
+  while (ids.length < maxCount) {
+    const ep = new URL('https://www.googleapis.com/youtube/v3/playlistItems');
+    ep.searchParams.set('part', 'contentDetails');
+    ep.searchParams.set('playlistId', playlistId);
+    ep.searchParams.set('maxResults', '50');
+    if (pageToken) ep.searchParams.set('pageToken', pageToken);
+    ep.searchParams.set('key', key);
+
+    const r = await fetch(ep);
+    await assertOk_(r, 'playlistItems API');
+    const j = await r.json();
+
+    for (const it of (j.items || [])) {
+      const id = it.contentDetails?.videoId;
+      if (id) ids.push(id);
+      if (ids.length >= maxCount) break;
+    }
+    pageToken = j.nextPageToken || '';
+    if (!pageToken) break;
+    setBusy(true, `取得中… ${ids.length}件`);
+  }
+  return ids;
+}
+
+// --- 共通: エラー本文を拾って見やすく ---
+async function assertOk_(res, label){
+  if (res.ok) return;
+  let detail = '';
+  try { detail = ' / ' + (await res.text()).slice(0,200); } catch {}
+  throw new Error(`${label} エラー: ${res.status}${detail}`);
+}
+
+// --- UI helpers ---
+function setBusy(b, msg){ runBtn.disabled = b; statusEl.textContent = b ? (msg || '取得中…') : '' }
+function flash(msg){ statusEl.textContent = msg; setTimeout(()=> statusEl.textContent='', 1500) }
+</script>
