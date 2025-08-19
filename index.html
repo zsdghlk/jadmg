@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>YouTube 一括取得・整形（モバイル最適）</title>
+<title>YouTube 一括取得・整形（スマホ最適・美麗テンプレ）</title>
 
 <style>
   :root{
@@ -29,10 +29,7 @@
   }
   .muted{color:var(--muted)}
   .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
-  .grid{
-    display:grid; gap:10px;
-    grid-template-columns: 1fr;
-  }
+  .grid{display:grid; gap:10px; grid-template-columns: 1fr;}
   @media (min-width:720px){ .grid.grid-2{ grid-template-columns: 1fr 1fr; } }
   input,button,select,textarea{
     width:100%; padding:12px 12px; border-radius:10px; border:1px solid var(--bd);
@@ -49,10 +46,6 @@
   .btn:active{ transform: translateY(1px); }
   .btn.secondary{ background:transparent; color:var(--accent); border:1px solid var(--accent); }
   .btn.ghost{ background:transparent; color:var(--text); border:1px dashed var(--bd); }
-  .chip{
-    display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px;
-    border:1px solid var(--bd); background:transparent; color:var(--text); font-weight:600;
-  }
   .toggle{
     display:flex; border:1px solid var(--bd); border-radius:12px; overflow:hidden; width:100%;
   }
@@ -61,21 +54,6 @@
   }
   .toggle > button.active{ background:var(--accent); color:#fff; }
   .section-title{font-weight:800; margin:6px 0 10px; font-size:1rem}
-  .pill{display:inline-block; padding:.35em .7em; border:1px solid var(--bd); border-radius:999px}
-  .kpi{
-    display:flex; gap:10px; flex-wrap:wrap; align-items:center;
-  }
-  .kpi .box{
-    flex:1 1 110px; min-width:110px;
-    background:transparent; border:1px solid var(--bd); border-radius:12px; padding:10px;
-  }
-  .kpi .label{color:var(--muted); font-size:.85em}
-  .kpi .value{font-weight:900; font-size:1.1em}
-  .cards{ display:grid; gap:10px; grid-template-columns: 1fr; }
-  @media (min-width:580px){ .cards{ grid-template-columns: 1fr 1fr; } }
-  .card{ border:1px solid var(--bd); border-radius:12px; padding:12px; }
-  .card .no{ color:var(--muted); font-weight:700 }
-  .card .title a{ color:inherit; text-decoration:none; font-weight:800 }
   .stickybar{
     position:sticky; bottom:0; z-index:10; padding:10px; margin-top:10px;
     background:linear-gradient(180deg, color-mix(in oklab, var(--panel) 70%, transparent), var(--panel));
@@ -87,10 +65,11 @@
   details.preview{ border:1px dashed var(--bd); border-radius:12px; padding:10px; }
   details.preview > summary{ cursor:pointer; font-weight:800 }
   a{ color:var(--accent-2) }
+  .hide{display:none}
 </style>
 
 <div class="wrap">
-  <h1>YouTube 一括取得・整形（スマホ最適）</h1>
+  <h1>YouTube 一括取得・整形（スマホ最適・美麗テンプレ）</h1>
 
   <!-- モード切替 -->
   <div class="panel">
@@ -98,10 +77,10 @@
       <button type="button" data-mode="collect" class="active" aria-selected="true">取得モード</button>
       <button type="button" data-mode="format" aria-selected="false">整形モード</button>
     </div>
-    <p class="muted" style="margin:.6em 0 0">取得：チャンネル/プレイリスト/URLから動画を収集 → 整形まで実行。整形：貼り付けたURL群を整形。</p>
+    <p class="muted" style="margin:.6em 0 0">取得：チャンネル/PL/URLから収集→整形。整形：貼り付けたURL群を整形。</p>
   </div>
 
-  <!-- API/GAS 設定 -->
+  <!-- 接続設定 -->
   <div class="panel">
     <div class="section-title">接続設定</div>
     <div class="toggle" id="apiToggle" role="tablist" aria-label="接続先">
@@ -193,8 +172,9 @@
       <div>
         <label>出力テンプレ</label>
         <select id="format">
-          <option value="html-list" selected>HTML：連番リスト（統計付き）</option>
-          <option value="html-cards">HTML：カード型（統計付き）</option>
+          <option value="html-cards-pro" selected>HTML：Cards Pro（美麗カード・サムネ）</option>
+          <option value="html-table-pro">HTML：Table Pro（美麗テーブル）</option>
+          <option value="html-list">HTML：連番リスト（軽量）</option>
           <option value="md">Markdown（統計＋連番）</option>
           <option value="tsv">TSV（表）</option>
           <option value="csv">CSV（表）</option>
@@ -226,7 +206,7 @@
       </div>
     </div>
 
-    <p class="muted" style="margin:.6em 0 0">行形式（HTML/MD/TSV/CSV）は <strong>連番. タイトル(リンク) — 視聴回数(リンク) — 👍高評価 — 💬コメント — 平均/日 — 推定増分 — 公開日</strong> を出力。</p>
+    <p class="muted" style="margin:.6em 0 0">カード/テーブルは**サムネ/番号/リンク**入りの綺麗なHTMLを出力します。</p>
 
     <textarea id="out" placeholder="ここに結果が出ます"></textarea>
 
@@ -247,7 +227,7 @@
 
 <script>
 /* ========= 初期設定 ========= */
-const DEFAULT_API_KEY = ''; // 公開配布時は空推奨
+const DEFAULT_API_KEY = ''; // 公開配布時は空推奨（端末ローカル保存を使用）
 const apiKeyInput = document.getElementById('apiKey');
 const appUrlInput = document.getElementById('appUrl');
 const apiRow = document.getElementById('apiRow');
@@ -360,6 +340,7 @@ runFormat.onclick = async ()=>{
       const d = details.get(id)||{};
       return {
         url:`https://www.youtube.com/watch?v=${id}`,
+        videoId:id,
         viewCount:d.viewCount ?? null,
         likeCount:d.likeCount ?? null,
         commentCount:d.commentCount ?? null,
@@ -370,7 +351,6 @@ runFormat.onclick = async ()=>{
       };
     });
     rows = applySinceAndSort(rows,{since,sort});
-    // 同一チャンネルなら統計を補完
     let channel = null;
     const uniq = new Set(rows.map(r=>r.channelId).filter(Boolean));
     if (uniq.size===1) channel = await fetchChannelInfo(Array.from(uniq)[0], key);
@@ -397,6 +377,7 @@ function rerender(){
   const win = clampInt(Number(windowDays.value)||28,1,3650);
 
   let rows = lastRows.map(r=>({...r}));
+  rows = ensureVideoId(rows);
   rows = addDerived(rows, win);
   rows = sortAfter(rows, postSort);
 
@@ -404,6 +385,13 @@ function rerender(){
   outTA.value = text;
   setCount(rows.length);
   renderPreviewIfHtml(text);
+}
+function ensureVideoId(rows){
+  return rows.map(r=>{
+    if (r.videoId) return r;
+    const m = String(r.url||'').match(/v=([0-9A-Za-z_-]{11})|youtu\.be\/([0-9A-Za-z_-]{11})|shorts\/([0-9A-Za-z_-]{11})/);
+    return {...r, videoId: (m && (m[1]||m[2]||m[3])) || ''};
+  });
 }
 
 /* ========= プレビュー ========= */
@@ -449,77 +437,181 @@ function addDerived(rows, winDays){
   });
 }
 
-/* ========= 整形本文生成（ヘッダに統計） ========= */
+/* ========= 綺麗なテンプレ群を生成 ========= */
 function renderText(rows, fmt, startNo, channel, winDays){
   const num=(i)=> String(startNo + i);
   const fmtNum=(n,u='')=> (n==null||isNaN(n))? '' : Number(n).toLocaleString('ja-JP')+u;
   const fmtFloat=(n)=> (n==null||isNaN(n))? '' : (Math.round(n*10)/10).toLocaleString('ja-JP');
   const escHtml = (s)=> String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-  const headHtml = channel?(()=>{
+
+  const channelHtml = channel?(()=>{
     const url = channel.url || (channel.id?`https://www.youtube.com/channel/${channel.id}`:'');
-    return `<section style="margin:0 0 10px;padding:10px;border:1px solid var(--bd);border-radius:10px">
-      <div style="display:flex;gap:8px;align-items:center">
-        ${channel.avatar? `<img src="${channel.avatar}" alt="" style="width:44px;height:44px;border-radius:999px">`:''}
-        <div>
-          <div style="font-weight:800"><a href="${url}" target="_blank" rel="noopener">${escHtml(channel.title||'')}</a></div>
-          <div style="color:var(--muted);font-size:.95em">
-            登録者数：${fmtNum(channel.subscriberCount,'人')}　総再生回数：${fmtNum(channel.viewCount,'回')}　動画数：${fmtNum(channel.videoCount,'本')}
+    return `
+      <div class="ytp-head">
+        ${channel.avatar? `<img class="ytp-avatar" src="${channel.avatar}" alt="">`:''}
+        <div class="ytp-head-meta">
+          <div class="ytp-title"><a href="${url}" target="_blank" rel="noopener">${escHtml(channel.title||'')}</a></div>
+          <div class="ytp-stats">
+            <span>登録者数：${fmtNum(channel.subscriberCount,'人')}</span>
+            <span>総再生回数：${fmtNum(channel.viewCount,'回')}</span>
+            <span>動画数：${fmtNum(channel.videoCount,'本')}</span>
           </div>
         </div>
-      </div>
-    </section>`;
+      </div>`;
   })() : '';
 
-  const viewLine = (r)=>{
-    const views = (r.viewCount!=null)? Number(r.viewCount).toLocaleString('ja-JP')+'回' : '-';
+  // 各行の共通メトリクス整形
+  const line = (r)=>{
+    const views = (r.viewCount!=null)? Number(r.viewCount).toLocaleString('ja-JP') : '-';
     const likes = (r.likeCount!=null)? Number(r.likeCount).toLocaleString('ja-JP') : '-';
     const comms = (r.commentCount!=null)? Number(r.commentCount).toLocaleString('ja-JP') : '-';
-    const avg   = isNaN(r.__avgPerDay)? '-': `${fmtFloat(r.__avgPerDay)}/日`;
-    const grow  = isNaN(r.__growthWin)? '-': `${Math.round(r.__growthWin).toLocaleString('ja-JP')}回/推定${winDays}日`;
+    const avg   = isNaN(r.__avgPerDay)? '-' : `${fmtFloat(r.__avgPerDay)}/日`;
+    const grow  = isNaN(r.__growthWin)? '-' : `${Math.round(r.__growthWin).toLocaleString('ja-JP')} / 推定${winDays}日`;
     const date  = r.publishedAt? r.publishedAt.slice(0,10) : '';
-    return {views, likes, comms, avg, grow, date};
+    const thumb = r.videoId ? `https://i.ytimg.com/vi/${r.videoId}/hqdefault.jpg` : '';
+    return {views, likes, comms, avg, grow, date, thumb};
   };
 
-  if (fmt==='html-list' || fmt==='html-cards'){
-    if (fmt==='html-list'){
-      const items = rows.map((r,i)=>{
-        const v=viewLine(r);
-        return `<li style="margin:.4em 0">
-          <span style="font-weight:700;color:var(--muted)">#${num(i)}</span>
-          <a href="${r.url}" target="_blank" rel="noopener" style="font-weight:800"> ${escHtml(r.title)}</a>
-          — <a href="${r.url}" target="_blank" rel="noopener">${v.views}</a>
-          — 👍 ${v.likes} — 💬 ${v.comms} — ${v.avg} — ${v.grow}
-          — <span style="color:var(--muted)">${escHtml(v.date)}</span>
-        </li>`;
-      }).join('');
-      return `${headHtml}<ol start="${startNo}" style="padding-left:1.2em">${items}</ol>`;
-    }else{
-      const cards = rows.map((r,i)=>{
-        const v=viewLine(r);
-        return `<div class="card">
-          <div class="no">#${num(i)}</div>
-          <div class="title"><a href="${r.url}" target="_blank" rel="noopener">${escHtml(r.title)}</a></div>
-          <div><a href="${r.url}" target="_blank" rel="noopener">${v.views}</a> ｜ 👍 ${v.likes} ｜ 💬 ${v.comms}</div>
-          <div>平均/日：${v.avg} ｜ 推定増分：${v.grow}</div>
-          <div class="muted">${escHtml(v.date)}</div>
-        </div>`;
-      }).join('');
-      return `${headHtml}<div class="cards">${cards}</div>`;
-    }
+  /* ---------- Cards Pro（デザイン重視の美麗カード） ---------- */
+  if (fmt==='html-cards-pro'){
+    const css = `
+    <style>
+    .yt-pack{--c:#e5e7eb;--b:#e5e7eb33;--bg:transparent; color:inherit}
+    @media (prefers-color-scheme: dark){ .yt-pack{--c:#9aa0a6; --b:#ffffff22} }
+    .ytp{font-family:inherit}
+    .ytp .ytp-head{display:flex; gap:12px; align-items:center; margin:4px 0 10px}
+    .ytp .ytp-avatar{width:48px;height:48px;border-radius:999px;border:1px solid var(--b); background:#fff; object-fit:cover}
+    .ytp .ytp-head-meta{display:flex; flex-direction:column; gap:4px}
+    .ytp .ytp-title{font-weight:900; font-size:1.05em}
+    .ytp .ytp-title a{color:inherit; text-decoration:none}
+    .ytp .ytp-stats{display:flex; flex-wrap:wrap; gap:10px; color:var(--c); font-size:.93em}
+    .ytp-grid{display:grid; gap:12px; grid-template-columns:1fr}
+    @media (min-width:580px){ .ytp-grid{ grid-template-columns:1fr 1fr } }
+    @media (min-width:900px){ .ytp-grid{ grid-template-columns:1fr 1fr 1fr } }
+    .ytp-card{border:1px solid var(--b); border-radius:14px; overflow:hidden; background:var(--bg);}
+    .ytp-thumb{position:relative; aspect-ratio:16/9; background:#111;}
+    .ytp-thumb img{width:100%; height:100%; object-fit:cover; display:block; filter:saturate(1.05)}
+    .ytp-no{position:absolute; top:8px; left:8px; background:#0009; color:#fff; font-weight:900; padding:.25em .55em; border-radius:999px; font-size:.85em}
+    .ytp-meta{padding:10px 12px; display:grid; gap:6px}
+    .ytp-titleline a{color:inherit; text-decoration:none; font-weight:800; line-height:1.45}
+    .ytp-badges{display:flex; flex-wrap:wrap; gap:8px; color:var(--c); font-size:.92em}
+    .ytp-badge{display:inline-flex; align-items:center; gap:6px;}
+    .ytp-badge a{color:inherit; text-decoration:none}
+    .ytp-row{display:flex; gap:10px; align-items:center; justify-content:space-between; color:var(--c); font-size:.9em}
+    .ytp-row .left{display:flex; flex-wrap:wrap; gap:10px}
+    .ytp-divider{height:1px; background:var(--b); margin:6px 0}
+    </style>`;
+
+    const cards = rows.map((r,i)=>{
+      const v=line(r);
+      return `<article class="ytp-card">
+        <a class="ytp-thumb" href="${r.url}" target="_blank" rel="noopener">
+          ${v.thumb? `<img src="${v.thumb}" alt="">` : ''}
+          <div class="ytp-no">#${num(i)}</div>
+        </a>
+        <div class="ytp-meta">
+          <div class="ytp-titleline"><a href="${r.url}" target="_blank" rel="noopener">${escHtml(r.title)}</a></div>
+          <div class="ytp-badges">
+            <span class="ytp-badge">📅 ${escHtml(v.date)}</span>
+            <span class="ytp-badge">👍 ${v.likes}</span>
+            <span class="ytp-badge">💬 ${v.comms}</span>
+          </div>
+          <div class="ytp-divider"></div>
+          <div class="ytp-row">
+            <div class="left">
+              <span class="ytp-badge">▶️ <a href="${r.url}" target="_blank" rel="noopener">${v.views}回</a></span>
+              <span class="ytp-badge">平均/日：${v.avg}</span>
+            </div>
+            <div class="ytp-badge">推定増分：${v.grow}</div>
+          </div>
+        </div>
+      </article>`;
+    }).join('');
+
+    return `
+      <section class="yt-pack">
+        ${css}
+        <div class="ytp">
+          ${channelHtml}
+          <div class="ytp-grid">${cards}</div>
+        </div>
+      </section>`;
   }
 
+  /* ---------- Table Pro（読みやすい美麗テーブル） ---------- */
+  if (fmt==='html-table-pro'){
+    const css = `
+    <style>
+    .yt-pack{--c:#9aa0a6;--b:#e5e7eb33;--bg:transparent; color:inherit}
+    @media (prefers-color-scheme: light){ .yt-pack{--c:#60656b; --b:#00000010} }
+    .ytp-table{width:100%; border-collapse:separate; border-spacing:0; border:1px solid var(--b); border-radius:12px; overflow:hidden}
+    .ytp-table thead th{background:color-mix(in oklab, currentColor 10%, transparent); color:inherit; text-align:left; font-weight:800; padding:10px; border-bottom:1px solid var(--b); position:sticky; top:0}
+    .ytp-table tbody td{padding:10px; border-bottom:1px solid var(--b); vertical-align:top}
+    .ytp-table tbody tr:hover{background:color-mix(in oklab, currentColor 6%, transparent)}
+    .ytp-thumb{width:120px; aspect-ratio:16/9; object-fit:cover; border-radius:8px; border:1px solid var(--b)}
+    .ytp-num{color:var(--c); font-weight:700}
+    .ytp-title a{color:inherit; text-decoration:none; font-weight:800}
+    .ytp-meta{color:var(--c); font-size:.92em}
+    .ytp-views a{color:inherit; text-decoration:none}
+    @media (max-width:720px){
+      .ytp-table colgroup col:nth-child(3){ display:none }
+      .ytp-hide-sm{ display:none }
+    }
+    </style>`;
+    const rowsHtml = rows.map((r,i)=>{
+      const v=line(r);
+      return `<tr>
+        <td class="ytp-num">#${num(i)}</td>
+        <td class="ytp-title">
+          <div><a href="${r.url}" target="_blank" rel="noopener">${escHtml(r.title)}</a></div>
+          <div class="ytp-meta">📅 ${escHtml(v.date)} ｜ 👍 ${v.likes} ｜ 💬 ${v.comms}</div>
+        </td>
+        <td class="ytp-hide-sm"><img class="ytp-thumb" src="${v.thumb}" alt=""></td>
+        <td class="ytp-views">▶️ <a href="${r.url}" target="_blank" rel="noopener">${v.views}回</a></td>
+        <td>平均/日：${v.avg}<br>推定増分：${v.grow}</td>
+      </tr>`;
+    }).join('');
+    return `
+      <section class="yt-pack">
+        ${css}
+        ${channelHtml}
+        <table class="ytp-table">
+          <colgroup>
+            <col style="width:64px"><col><col style="width:140px"><col style="width:140px"><col style="width:220px">
+          </colgroup>
+          <thead><tr><th>#</th><th>動画</th><th class="ytp-hide-sm">サムネ</th><th>視聴回数</th><th>統計</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </section>`;
+  }
+
+  /* ---------- シンプル連番リスト（軽量） ---------- */
+  if (fmt==='html-list'){
+    const items = rows.map((r,i)=>{
+      const v=line(r);
+      return `<li style="margin:.4em 0">
+        <span style="font-weight:700;opacity:.7">#${num(i)}</span>
+        <a href="${r.url}" target="_blank" rel="noopener" style="font-weight:800"> ${escHtml(r.title)}</a>
+        — <a href="${r.url}" target="_blank" rel="noopener">${v.views}回</a>
+        — 👍 ${v.likes} — 💬 ${v.comms} — 平均/日 ${v.avg} — 推定 ${v.grow} — <span style="opacity:.7">${escHtml(v.date)}</span>
+      </li>`;
+    }).join('');
+    return `${channelHtml}<ol start="${startNo}" style="padding-left:1.2em">${items}</ol>`;
+  }
+
+  /* ---------- Markdown ---------- */
   if (fmt==='md'){
     const header = channel? `## [${channel.title||''}](${channel.url || (channel.id?`https://www.youtube.com/channel/${channel.id}`:'')})
 登録者数：${fmtNum(channel.subscriberCount)}　総再生回数：${fmtNum(channel.viewCount)}　動画数：${fmtNum(channel.videoCount)}
 ` : '';
     const lines = rows.map((r,i)=>{
-      const v=viewLine(r);
-      return `${num(i)}. [${r.title}](${r.url}) — [${v.views}](${r.url}) — 👍 ${v.likes} — 💬 ${v.comms} — 平均/日 ${v.avg} — 推定増分 ${v.grow} — ${v.date}`;
+      const v=line(r);
+      return `${num(i)}. [${r.title}](${r.url}) — [${v.views}回](${r.url}) — 👍 ${v.likes} — 💬 ${v.comms} — 平均/日 ${v.avg} — 推定 ${v.grow} — ${v.date}`;
     }).join('\n');
     return header + lines;
   }
 
-  // TSV / CSV
+  /* ---------- TSV / CSV ---------- */
   const sep = (fmt==='csv')? ',' : '\t';
   const esc = (s)=> {
     s=String(s??'');
@@ -540,13 +632,13 @@ function renderText(rows, fmt, startNo, channel, winDays){
   }
   lines.push(head.map(esc).join(sep));
   rows.forEach((r,i)=>{
-    const v=viewLine(r);
-    lines.push([num(i), r.url, v.views.replace('回',''), v.likes, v.comms, v.avg.replace('/日',''), v.grow.replace('回/推定'+winDays+'日',''), v.date, r.title].map(esc).join(sep));
+    const v=line(r);
+    lines.push([num(i), r.url, v.views, v.likes, v.comms, v.avg.replace('/日',''), v.grow.replace(/ .*$/,''), v.date, r.title].map(esc).join(sep));
   });
   return lines.join('\n');
 }
 
-/* ========= 取得ヘルパ ========= */
+/* ========= 便利関数 ========= */
 function getKeyOrThrow(){ const k=apiKeyInput.value.trim(); if(!k) throw new Error('APIキーを入力してください'); return k; }
 function busy(b,msg){ statusEl.textContent = b ? (msg||'処理中…') : ''; }
 function setCount(n){ countEl.textContent = (n==='—')?'—':String(Number(n)||0); }
@@ -564,7 +656,7 @@ async function runViaClient(key, raw, {max,since,sort}){
   const details  = await fetchVideosDetails(videoIds, key);
   let rows = videoIds.map((id,i)=>{
     const d=details.get(id)||{};
-    return { url:`https://www.youtube.com/watch?v=${id}`, viewCount:d.viewCount??null, likeCount:d.likeCount??null, commentCount:d.commentCount??null, title:d.title??'', publishedAt:d.publishedAt??'', channelId:d.channelId||'', __idx:i };
+    return { url:`https://www.youtube.com/watch?v=${id}`, videoId:id, viewCount:d.viewCount??null, likeCount:d.likeCount??null, commentCount:d.commentCount??null, title:d.title??'', publishedAt:d.publishedAt??'', channelId:d.channelId||'', __idx:i };
   });
   rows = applySinceAndSort(rows,{since,sort});
   return { rows, channel };
@@ -599,7 +691,7 @@ async function runViaGAS(appUrl, channelInput, {max,since,sort}){
 function normalizeFromBackend(json, sort, since){
   if (!json || json.ok===false) throw new Error(json?.error || 'GAS応答エラー');
   let rows = (json.items||[]).map((it,i)=>({
-    url: it.url||'', viewCount: it.viewCount!=null?Number(it.viewCount):null, likeCount: it.likeCount!=null?Number(it.likeCount):null, commentCount: it.commentCount!=null?Number(it.commentCount):null,
+    url: it.url||'', videoId: (it.videoId||extractIdFromUrl(it.url)) || '', viewCount: it.viewCount!=null?Number(it.viewCount):null, likeCount: it.likeCount!=null?Number(it.likeCount):null, commentCount: it.commentCount!=null?Number(it.commentCount):null,
     title: it.title||'', publishedAt: it.publishedAt||'', channelId: it.channelId||'', __idx:i
   }));
   rows = applySinceAndSort(rows,{since,sort});
@@ -610,6 +702,10 @@ function normalizeFromBackend(json, sort, since){
     videoCount: json.channel.videoCount!=null?Number(json.channel.videoCount):null
   } : null;
   return { rows, channel };
+}
+function extractIdFromUrl(u){
+  const m=String(u||'').match(/v=([0-9A-Za-z_-]{11})|youtu\.be\/([0-9A-Za-z_-]{11})|shorts\/([0-9A-Za-z_-]{11})/);
+  return (m && (m[1]||m[2]||m[3])) || '';
 }
 
 /* ========= API 呼び出し群 ========= */
@@ -765,12 +861,4 @@ function extractVideoIds(text){
 
 /* ========= 便利ボタン ========= */
 copyBtn.onclick = async () => {
-  try{ await navigator.clipboard.writeText(outTA.value); toast('コピーしました'); }
-  catch{ alert('コピーに失敗しました'); }
-};
-dlCsvBtn.onclick = ()=>{
-  const text=outTA.value||'';
-  const blob=new Blob([new Uint8Array([0xEF,0xBB,0xBF]), text.replace(/\t/g, ',')],{type:'text/csv'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`youtube_${Date.now()}.csv`; document.body.appendChild(a); a.click(); a.remove();
-};
-</script>
+  try{ await navigator.clip
