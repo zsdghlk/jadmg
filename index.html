@@ -1,864 +1,206 @@
-<!doctype html>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>YouTube 一括取得・整形（スマホ最適・美麗テンプレ）</title>
+/*****************************************************
+ * YouTube Data API v3 – Apps Script backend (simple)
+ * - JSON / JSONP(callback=) 対応
+ * - @handle / UC... / URL(動画/PL/旧URL) 解決
+ * - Script Properties: YOUTUBE_API_KEY を優先
+ * - items[]: videoId,url,title,publishedAt,viewCount,likeCount,commentCount,channelId
+ * - channel: id,title,url,subscriberCount,viewCount,videoCount
+ *****************************************************/
+const API_KEY_FALLBACK = '';
 
-<style>
-  :root{
-    --bg:#0b0b0c; --panel:#121316; --text:#f2f3f5; --muted:#9aa0a6; --bd:#1f2126;
-    --accent:#4f8cff; --accent-2:#2962ff; --ok:#10b981; --warn:#f59e0b; --danger:#ef4444;
-  }
-  @media (prefers-color-scheme: light){
-    :root{ --bg:#f7f7fb; --panel:#ffffff; --text:#0a0a0b; --muted:#60656b; --bd:#e7e8ee;
-           --accent:#1e88e5; --accent-2:#1565c0; }
-  }
-  *{box-sizing:border-box}
-  html,body{height:100%}
-  body{
-    margin:0; background:var(--bg); color:var(--text);
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans JP", sans-serif;
-    line-height:1.65;
-    -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
-    font-size:clamp(14px, 2.8vw, 16px);
-  }
-  .wrap{max-width:980px; margin:0 auto; padding:16px;}
-  h1{font-size:clamp(18px,4.8vw,22px); margin:0 0 12px;}
-  .panel{
-    background:var(--panel); border:1px solid var(--bd); border-radius:14px; padding:12px; margin:12px 0;
-    box-shadow: 0 1px 2px rgba(0,0,0,.06);
-  }
-  .muted{color:var(--muted)}
-  .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
-  .grid{display:grid; gap:10px; grid-template-columns: 1fr;}
-  @media (min-width:720px){ .grid.grid-2{ grid-template-columns: 1fr 1fr; } }
-  input,button,select,textarea{
-    width:100%; padding:12px 12px; border-radius:10px; border:1px solid var(--bd);
-    background:transparent; color:var(--text); outline:none;
-  }
-  input::placeholder, textarea::placeholder{ color:color-mix(in oklab, var(--muted) 80%, transparent); }
-  textarea{ min-height:260px; }
-  label{font-weight:600}
-  .btn{
-    background:var(--accent); border-color:transparent; color:#fff; font-weight:700; cursor:pointer;
-    transition: transform .02s ease, background .15s ease;
-    text-align:center;
-  }
-  .btn:active{ transform: translateY(1px); }
-  .btn.secondary{ background:transparent; color:var(--accent); border:1px solid var(--accent); }
-  .btn.ghost{ background:transparent; color:var(--text); border:1px dashed var(--bd); }
-  .toggle{
-    display:flex; border:1px solid var(--bd); border-radius:12px; overflow:hidden; width:100%;
-  }
-  .toggle > button{
-    flex:1 1 0; padding:10px; border:0; background:transparent; color:var(--muted); font-weight:700; cursor:pointer;
-  }
-  .toggle > button.active{ background:var(--accent); color:#fff; }
-  .section-title{font-weight:800; margin:6px 0 10px; font-size:1rem}
-  .stickybar{
-    position:sticky; bottom:0; z-index:10; padding:10px; margin-top:10px;
-    background:linear-gradient(180deg, color-mix(in oklab, var(--panel) 70%, transparent), var(--panel));
-    border:1px solid var(--bd); border-radius:14px;
-    display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;
-  }
-  .stickybar .left{ display:flex; gap:10px; flex-wrap:wrap; }
-  .count{ font-weight:800; }
-  details.preview{ border:1px dashed var(--bd); border-radius:12px; padding:10px; }
-  details.preview > summary{ cursor:pointer; font-weight:800 }
-  a{ color:var(--accent-2) }
-  .hide{display:none}
-</style>
+function getApiKey_(){
+  const prop = PropertiesService.getScriptProperties().getProperty('YOUTUBE_API_KEY');
+  const key  = (prop || API_KEY_FALLBACK || '').trim();
+  if (!key) throw new Error('APIキーが設定されていません（Script Properties に YOUTUBE_API_KEY を保存）');
+  return key;
+}
 
-<div class="wrap">
-  <h1>YouTube 一括取得・整形（スマホ最適・美麗テンプレ）</h1>
-
-  <!-- モード切替 -->
-  <div class="panel">
-    <div class="toggle" id="workToggle" role="tablist" aria-label="作業モード">
-      <button type="button" data-mode="collect" class="active" aria-selected="true">取得モード</button>
-      <button type="button" data-mode="format" aria-selected="false">整形モード</button>
-    </div>
-    <p class="muted" style="margin:.6em 0 0">取得：チャンネル/PL/URLから収集→整形。整形：貼り付けたURL群を整形。</p>
-  </div>
-
-  <!-- 接続設定 -->
-  <div class="panel">
-    <div class="section-title">接続設定</div>
-    <div class="toggle" id="apiToggle" role="tablist" aria-label="接続先">
-      <button type="button" data-api="client" class="active" aria-selected="true">直接API</button>
-      <button type="button" data-api="gas" aria-selected="false">GASバックエンド</button>
-    </div>
-
-    <div id="apiRow" class="grid" style="margin-top:10px">
-      <div>
-        <label>APIキー</label>
-        <input id="apiKey" placeholder="YouTube Data API v3 の APIキー" inputmode="text" autocomplete="off" />
-      </div>
-      <div class="row">
-        <button id="saveKey" class="btn" style="flex:1 1 140px">保存</button>
-        <span class="muted">（この端末にのみ保存）</span>
-      </div>
-    </div>
-
-    <div id="gasRow" class="grid hide" style="margin-top:10px">
-      <div>
-        <label>GAS APP_URL（/exec）</label>
-        <input id="appUrl" placeholder="https://script.google.com/macros/s/xxxxxxxx/exec" inputmode="url" />
-      </div>
-      <div class="muted">※ /dev ではなく /exec を指定してください</div>
-    </div>
-  </div>
-
-  <!-- 取得モード -->
-  <div id="collectBox" class="panel">
-    <div class="section-title">取得</div>
-    <div class="grid grid-2">
-      <div>
-        <label>チャンネル / プレイリスト / URL</label>
-        <input id="channel" placeholder="@handle / UCxxxxxxxx... / https://.../@handle / 動画URL / プレイリストURL" />
-      </div>
-      <div>
-        <label>最大件数</label>
-        <input id="limit" type="number" value="200" min="1" max="5000" />
-      </div>
-      <div>
-        <label>公開日 since</label>
-        <input id="since" type="date" />
-      </div>
-      <div>
-        <label>取得時の並び</label>
-        <select id="sort">
-          <option value="newest" selected>新しい順（公開日）</option>
-          <option value="oldest">古い順（公開日）</option>
-          <option value="none">そのまま</option>
-        </select>
-      </div>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <button id="runCollect" class="btn" style="flex:1">取得 → 整形</button>
-      <span id="status" class="muted" style="flex:2 1 160px"></span>
-    </div>
-  </div>
-
-  <!-- 整形モード -->
-  <div id="formatBox" class="panel hide">
-    <div class="section-title">整形</div>
-    <div>
-      <label class="muted">動画URLを改行/スペース区切りで貼り付け</label>
-      <textarea id="rawUrls" placeholder="例）https://www.youtube.com/watch?v=dQw4w9WgXcQ&#10;https://youtu.be/XXXXXXXXXXX"></textarea>
-    </div>
-    <div class="grid grid-2">
-      <div>
-        <label>公開日 since</label>
-        <input id="since2" type="date" />
-      </div>
-      <div>
-        <label>取得時の並び</label>
-        <select id="sort2">
-          <option value="none" selected>入力順のまま</option>
-          <option value="newest">新しい順（公開日）</option>
-          <option value="oldest">古い順（公開日）</option>
-        </select>
-      </div>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <button id="runFormat" class="btn" style="flex:1">整形する</button>
-    </div>
-  </div>
-
-  <!-- 出力設定 -->
-  <div class="panel">
-    <div class="section-title">出力設定</div>
-    <div class="grid grid-2">
-      <div>
-        <label>出力テンプレ</label>
-        <select id="format">
-          <option value="html-cards-pro" selected>HTML：Cards Pro（美麗カード・サムネ）</option>
-          <option value="html-table-pro">HTML：Table Pro（美麗テーブル）</option>
-          <option value="html-list">HTML：連番リスト（軽量）</option>
-          <option value="md">Markdown（統計＋連番）</option>
-          <option value="tsv">TSV（表）</option>
-          <option value="csv">CSV（表）</option>
-        </select>
-      </div>
-      <div>
-        <label>整形後の並び替え</label>
-        <select id="postSort">
-          <option value="none" selected>入力順のまま</option>
-          <option value="viewsDesc">視聴回数 多い順</option>
-          <option value="viewsAsc">視聴回数 少ない順</option>
-          <option value="likesDesc">高評価 多い順</option>
-          <option value="likesAsc">高評価 少ない順</option>
-          <option value="commentsDesc">コメント 多い順</option>
-          <option value="commentsAsc">コメント 少ない順</option>
-          <option value="avgDesc">平均/日 多い順</option>
-          <option value="avgAsc">平均/日 少ない順</option>
-          <option value="growthDesc">推定増分(N日) 多い順</option>
-          <option value="growthAsc">推定増分(N日) 少ない順</option>
-        </select>
-      </div>
-      <div>
-        <label>推定N日</label>
-        <input id="windowDays" type="number" value="28" min="1" />
-      </div>
-      <div>
-        <label>開始番号</label>
-        <input id="startNum" type="number" value="1" min="1" />
-      </div>
-    </div>
-
-    <p class="muted" style="margin:.6em 0 0">カード/テーブルは**サムネ/番号/リンク**入りの綺麗なHTMLを出力します。</p>
-
-    <textarea id="out" placeholder="ここに結果が出ます"></textarea>
-
-    <details class="preview" id="previewWrap">
-      <summary>HTMLプレビュー（タップで開閉）</summary>
-      <div id="preview" style="margin-top:10px"></div>
-    </details>
-
-    <div class="stickybar">
-      <div class="left">
-        <button id="copy" class="btn" style="min-width:120px">コピー</button>
-        <button id="dlCsv" class="btn secondary" style="min-width:140px">CSVダウンロード</button>
-      </div>
-      <div class="count"><span id="count">0</span> 件</div>
-    </div>
-  </div>
-</div>
-
-<script>
-/* ========= 初期設定 ========= */
-const DEFAULT_API_KEY = ''; // 公開配布時は空推奨（端末ローカル保存を使用）
-const apiKeyInput = document.getElementById('apiKey');
-const appUrlInput = document.getElementById('appUrl');
-const apiRow = document.getElementById('apiRow');
-const gasRow = document.getElementById('gasRow');
-
-const workToggle = document.getElementById('workToggle');
-const apiToggle  = document.getElementById('apiToggle');
-
-const collectBox = document.getElementById('collectBox');
-const formatBox  = document.getElementById('formatBox');
-
-const channelInput = document.getElementById('channel');
-const limitInput   = document.getElementById('limit');
-const sinceInput   = document.getElementById('since');
-const sortSelect   = document.getElementById('sort');
-const runCollect   = document.getElementById('runCollect');
-
-const rawUrlsTA   = document.getElementById('rawUrls');
-const since2Input = document.getElementById('since2');
-const sort2Select = document.getElementById('sort2');
-const runFormat   = document.getElementById('runFormat');
-
-const fmtSelect   = document.getElementById('format');
-const postSortSel = document.getElementById('postSort');
-const windowDays  = document.getElementById('windowDays');
-const startNumInp = document.getElementById('startNum');
-
-const outTA     = document.getElementById('out');
-const copyBtn   = document.getElementById('copy');
-const dlCsvBtn  = document.getElementById('dlCsv');
-const statusEl  = document.getElementById('status');
-const countEl   = document.getElementById('count');
-const previewWrap= document.getElementById('previewWrap');
-const previewDiv = document.getElementById('preview');
-
-/* ========= ローカル保存 ========= */
-apiKeyInput.value = localStorage.getItem('yt_api_key') || DEFAULT_API_KEY || '';
-appUrlInput.value = localStorage.getItem('yt_app_url') || '';
-document.getElementById('saveKey').onclick = () => {
-  localStorage.setItem('yt_api_key', apiKeyInput.value.trim());
-  toast('APIキーを保存しました');
-};
-appUrlInput.addEventListener('change', ()=> localStorage.setItem('yt_app_url', appUrlInput.value.trim()));
-
-/* ========= トグルUI ========= */
-workToggle.addEventListener('click', (e)=>{
-  if (e.target.tagName !== 'BUTTON') return;
-  for (const b of workToggle.children) b.classList.remove('active'), b.setAttribute('aria-selected','false');
-  e.target.classList.add('active'); e.target.setAttribute('aria-selected','true');
-  const mode = e.target.dataset.mode;
-  collectBox.classList.toggle('hide', mode!=='collect');
-  formatBox.classList.toggle('hide',  mode!=='format');
-  clearOutput();
-});
-apiToggle.addEventListener('click', (e)=>{
-  if (e.target.tagName !== 'BUTTON') return;
-  for (const b of apiToggle.children) b.classList.remove('active'), b.setAttribute('aria-selected','false');
-  e.target.classList.add('active'); e.target.setAttribute('aria-selected','true');
-  const api = e.target.dataset.api;
-  apiRow.classList.toggle('hide', api!=='client');
-  gasRow.classList.toggle('hide', api!=='gas');
-});
-function getApiMode(){ return apiToggle.querySelector('.active').dataset.api; }
-
-/* ========= 状態 ========= */
-let lastRows = [];
-let lastChannel = null;
-
-/* ========= 取得モード ========= */
-runCollect.onclick = async ()=>{
-  const apiMode = getApiMode();
-  const raw  = channelInput.value.trim();
-  const max  = clampInt(Number(limitInput.value)||200,1,5000);
-  const since= sinceInput.value;
-  const sort = sortSelect.value;
-  if (!raw) return alert('チャンネル/プレイリスト/URLを入力してください');
+function doGet(e){
+  const p = (e && e.parameter) || {};
   try{
-    busy(true); setCount('—');
-    if (apiMode==='gas'){
-      const app = validateExecUrlOrThrow(appUrlInput.value.trim());
-      const payload = await runViaGAS(app, raw, {max,since,sort});
-      lastRows = payload.rows.map((r,i)=>({...r,__idx:i}));
-      lastChannel = payload.channel || null;
-    }else{
-      const key = getKeyOrThrow();
-      const {rows,channel} = await runViaClient(key, raw, {max,since,sort});
-      lastRows = rows.map((r,i)=>({...r,__idx:i}));
-      lastChannel = channel;
+    if (p.videoId){
+      const txt = getVideoText_(String(p.videoId).trim());
+      return textOut_(txt);
     }
-    rerender();
-    toast(`${lastRows.length}件を整形しました`);
-  }catch(err){
-    console.error(err);
-    clearOutput();
-    alert('エラー: ' + (err.message||err));
-  }finally{ busy(false); }
-};
-
-/* ========= 整形モード ========= */
-runFormat.onclick = async ()=>{
-  const ids = extractVideoIds(rawUrlsTA.value);
-  if (!ids.length) return alert('動画URLが見つかりませんでした');
-  const key   = getKeyOrThrow();
-  const since = since2Input.value;
-  const sort  = sort2Select.value;
-  try{
-    busy(true); setCount('—');
-    const details = await fetchVideosDetails(ids, key);
-    let rows = ids.map((id,i)=>{
-      const d = details.get(id)||{};
-      return {
-        url:`https://www.youtube.com/watch?v=${id}`,
-        videoId:id,
-        viewCount:d.viewCount ?? null,
-        likeCount:d.likeCount ?? null,
-        commentCount:d.commentCount ?? null,
-        title:d.title ?? '',
-        publishedAt:d.publishedAt ?? '',
-        channelId:d.channelId || '',
-        __idx:i
-      };
-    });
-    rows = applySinceAndSort(rows,{since,sort});
-    let channel = null;
-    const uniq = new Set(rows.map(r=>r.channelId).filter(Boolean));
-    if (uniq.size===1) channel = await fetchChannelInfo(Array.from(uniq)[0], key);
-    lastRows = rows;
-    lastChannel = channel;
-    rerender();
-    toast(`${lastRows.length}件を整形しました`);
-  }catch(err){
-    console.error(err);
-    clearOutput();
-    alert('エラー: ' + (err.message||err));
-  }finally{ busy(false); }
-};
-
-/* ========= 整形後の並び替えや設定変更で即再描画 ========= */
-for (const el of [postSortSel, fmtSelect, windowDays, startNumInp]) {
-  el.addEventListener('input', rerender);
-}
-
-/* ========= 再描画 ========= */
-function rerender(){
-  const startNo = clampInt(Number(startNumInp.value)||1,1,999999);
-  const postSort = postSortSel.value;
-  const win = clampInt(Number(windowDays.value)||28,1,3650);
-
-  let rows = lastRows.map(r=>({...r}));
-  rows = ensureVideoId(rows);
-  rows = addDerived(rows, win);
-  rows = sortAfter(rows, postSort);
-
-  const text = renderText(rows, fmtSelect.value, startNo, lastChannel, win);
-  outTA.value = text;
-  setCount(rows.length);
-  renderPreviewIfHtml(text);
-}
-function ensureVideoId(rows){
-  return rows.map(r=>{
-    if (r.videoId) return r;
-    const m = String(r.url||'').match(/v=([0-9A-Za-z_-]{11})|youtu\.be\/([0-9A-Za-z_-]{11})|shorts\/([0-9A-Za-z_-]{11})/);
-    return {...r, videoId: (m && (m[1]||m[2]||m[3])) || ''};
-  });
-}
-
-/* ========= プレビュー ========= */
-function renderPreviewIfHtml(text){
-  if (!/^html-/.test(fmtSelect.value)){ previewDiv.innerHTML=''; previewWrap.open=false; return; }
-  previewDiv.innerHTML = text;
-}
-
-/* ========= 並び替え ========= */
-function sortAfter(rows, key){
-  const byNum = (field, asc=true)=>(a,b)=>{
-    const av=Number(a[field]), bv=Number(b[field]);
-    const aNaN=isNaN(av), bNaN=isNaN(bv);
-    if (aNaN && bNaN) return a.__idx-b.__idx;
-    if (aNaN) return 1; if (bNaN) return -1;
-    return asc? (av-bv) : (bv-av);
-  };
-  switch(key){
-    case 'viewsDesc': return rows.sort(byNum('viewCount', false));
-    case 'viewsAsc' : return rows.sort(byNum('viewCount', true));
-    case 'likesDesc': return rows.sort(byNum('likeCount', false));
-    case 'likesAsc' : return rows.sort(byNum('likeCount', true));
-    case 'commentsDesc': return rows.sort(byNum('commentCount', false));
-    case 'commentsAsc' : return rows.sort(byNum('commentCount', true));
-    case 'avgDesc' : return rows.sort(byNum('__avgPerDay', false));
-    case 'avgAsc'  : return rows.sort(byNum('__avgPerDay', true));
-    case 'growthDesc': return rows.sort(byNum('__growthWin', false));
-    case 'growthAsc' : return rows.sort(byNum('__growthWin', true));
-    default: return rows.sort((a,b)=>a.__idx - b.__idx);
-  }
-}
-
-/* ========= 派生指標 ========= */
-function addDerived(rows, winDays){
-  const now = Date.now();
-  return rows.map(r=>{
-    const t = new Date(r.publishedAt||0).getTime();
-    const age = isFinite(t)? Math.max((now - t)/86400000, 1/24): NaN;
-    const views = (r.viewCount==null||isNaN(r.viewCount))? NaN: Number(r.viewCount);
-    const avg = (isNaN(views)||isNaN(age))? NaN: (views/age);
-    const growth = isNaN(avg)? NaN : (avg * Math.min(winDays, Math.max(age,0)));
-    return {...r, __ageDays:age, __avgPerDay:avg, __growthWin:growth};
-  });
-}
-
-/* ========= 綺麗なテンプレ群を生成 ========= */
-function renderText(rows, fmt, startNo, channel, winDays){
-  const num=(i)=> String(startNo + i);
-  const fmtNum=(n,u='')=> (n==null||isNaN(n))? '' : Number(n).toLocaleString('ja-JP')+u;
-  const fmtFloat=(n)=> (n==null||isNaN(n))? '' : (Math.round(n*10)/10).toLocaleString('ja-JP');
-  const escHtml = (s)=> String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-
-  const channelHtml = channel?(()=>{
-    const url = channel.url || (channel.id?`https://www.youtube.com/channel/${channel.id}`:'');
-    return `
-      <div class="ytp-head">
-        ${channel.avatar? `<img class="ytp-avatar" src="${channel.avatar}" alt="">`:''}
-        <div class="ytp-head-meta">
-          <div class="ytp-title"><a href="${url}" target="_blank" rel="noopener">${escHtml(channel.title||'')}</a></div>
-          <div class="ytp-stats">
-            <span>登録者数：${fmtNum(channel.subscriberCount,'人')}</span>
-            <span>総再生回数：${fmtNum(channel.viewCount,'回')}</span>
-            <span>動画数：${fmtNum(channel.videoCount,'本')}</span>
-          </div>
-        </div>
-      </div>`;
-  })() : '';
-
-  // 各行の共通メトリクス整形
-  const line = (r)=>{
-    const views = (r.viewCount!=null)? Number(r.viewCount).toLocaleString('ja-JP') : '-';
-    const likes = (r.likeCount!=null)? Number(r.likeCount).toLocaleString('ja-JP') : '-';
-    const comms = (r.commentCount!=null)? Number(r.commentCount).toLocaleString('ja-JP') : '-';
-    const avg   = isNaN(r.__avgPerDay)? '-' : `${fmtFloat(r.__avgPerDay)}/日`;
-    const grow  = isNaN(r.__growthWin)? '-' : `${Math.round(r.__growthWin).toLocaleString('ja-JP')} / 推定${winDays}日`;
-    const date  = r.publishedAt? r.publishedAt.slice(0,10) : '';
-    const thumb = r.videoId ? `https://i.ytimg.com/vi/${r.videoId}/hqdefault.jpg` : '';
-    return {views, likes, comms, avg, grow, date, thumb};
-  };
-
-  /* ---------- Cards Pro（デザイン重視の美麗カード） ---------- */
-  if (fmt==='html-cards-pro'){
-    const css = `
-    <style>
-    .yt-pack{--c:#e5e7eb;--b:#e5e7eb33;--bg:transparent; color:inherit}
-    @media (prefers-color-scheme: dark){ .yt-pack{--c:#9aa0a6; --b:#ffffff22} }
-    .ytp{font-family:inherit}
-    .ytp .ytp-head{display:flex; gap:12px; align-items:center; margin:4px 0 10px}
-    .ytp .ytp-avatar{width:48px;height:48px;border-radius:999px;border:1px solid var(--b); background:#fff; object-fit:cover}
-    .ytp .ytp-head-meta{display:flex; flex-direction:column; gap:4px}
-    .ytp .ytp-title{font-weight:900; font-size:1.05em}
-    .ytp .ytp-title a{color:inherit; text-decoration:none}
-    .ytp .ytp-stats{display:flex; flex-wrap:wrap; gap:10px; color:var(--c); font-size:.93em}
-    .ytp-grid{display:grid; gap:12px; grid-template-columns:1fr}
-    @media (min-width:580px){ .ytp-grid{ grid-template-columns:1fr 1fr } }
-    @media (min-width:900px){ .ytp-grid{ grid-template-columns:1fr 1fr 1fr } }
-    .ytp-card{border:1px solid var(--b); border-radius:14px; overflow:hidden; background:var(--bg);}
-    .ytp-thumb{position:relative; aspect-ratio:16/9; background:#111;}
-    .ytp-thumb img{width:100%; height:100%; object-fit:cover; display:block; filter:saturate(1.05)}
-    .ytp-no{position:absolute; top:8px; left:8px; background:#0009; color:#fff; font-weight:900; padding:.25em .55em; border-radius:999px; font-size:.85em}
-    .ytp-meta{padding:10px 12px; display:grid; gap:6px}
-    .ytp-titleline a{color:inherit; text-decoration:none; font-weight:800; line-height:1.45}
-    .ytp-badges{display:flex; flex-wrap:wrap; gap:8px; color:var(--c); font-size:.92em}
-    .ytp-badge{display:inline-flex; align-items:center; gap:6px;}
-    .ytp-badge a{color:inherit; text-decoration:none}
-    .ytp-row{display:flex; gap:10px; align-items:center; justify-content:space-between; color:var(--c); font-size:.9em}
-    .ytp-row .left{display:flex; flex-wrap:wrap; gap:10px}
-    .ytp-divider{height:1px; background:var(--b); margin:6px 0}
-    </style>`;
-
-    const cards = rows.map((r,i)=>{
-      const v=line(r);
-      return `<article class="ytp-card">
-        <a class="ytp-thumb" href="${r.url}" target="_blank" rel="noopener">
-          ${v.thumb? `<img src="${v.thumb}" alt="">` : ''}
-          <div class="ytp-no">#${num(i)}</div>
-        </a>
-        <div class="ytp-meta">
-          <div class="ytp-titleline"><a href="${r.url}" target="_blank" rel="noopener">${escHtml(r.title)}</a></div>
-          <div class="ytp-badges">
-            <span class="ytp-badge">📅 ${escHtml(v.date)}</span>
-            <span class="ytp-badge">👍 ${v.likes}</span>
-            <span class="ytp-badge">💬 ${v.comms}</span>
-          </div>
-          <div class="ytp-divider"></div>
-          <div class="ytp-row">
-            <div class="left">
-              <span class="ytp-badge">▶️ <a href="${r.url}" target="_blank" rel="noopener">${v.views}回</a></span>
-              <span class="ytp-badge">平均/日：${v.avg}</span>
-            </div>
-            <div class="ytp-badge">推定増分：${v.grow}</div>
-          </div>
-        </div>
-      </article>`;
-    }).join('');
-
-    return `
-      <section class="yt-pack">
-        ${css}
-        <div class="ytp">
-          ${channelHtml}
-          <div class="ytp-grid">${cards}</div>
-        </div>
-      </section>`;
-  }
-
-  /* ---------- Table Pro（読みやすい美麗テーブル） ---------- */
-  if (fmt==='html-table-pro'){
-    const css = `
-    <style>
-    .yt-pack{--c:#9aa0a6;--b:#e5e7eb33;--bg:transparent; color:inherit}
-    @media (prefers-color-scheme: light){ .yt-pack{--c:#60656b; --b:#00000010} }
-    .ytp-table{width:100%; border-collapse:separate; border-spacing:0; border:1px solid var(--b); border-radius:12px; overflow:hidden}
-    .ytp-table thead th{background:color-mix(in oklab, currentColor 10%, transparent); color:inherit; text-align:left; font-weight:800; padding:10px; border-bottom:1px solid var(--b); position:sticky; top:0}
-    .ytp-table tbody td{padding:10px; border-bottom:1px solid var(--b); vertical-align:top}
-    .ytp-table tbody tr:hover{background:color-mix(in oklab, currentColor 6%, transparent)}
-    .ytp-thumb{width:120px; aspect-ratio:16/9; object-fit:cover; border-radius:8px; border:1px solid var(--b)}
-    .ytp-num{color:var(--c); font-weight:700}
-    .ytp-title a{color:inherit; text-decoration:none; font-weight:800}
-    .ytp-meta{color:var(--c); font-size:.92em}
-    .ytp-views a{color:inherit; text-decoration:none}
-    @media (max-width:720px){
-      .ytp-table colgroup col:nth-child(3){ display:none }
-      .ytp-hide-sm{ display:none }
+    if (p.channelId || p.channel){
+      const channelId = p.channelId ? String(p.channelId).trim() : resolveChannelId_(p.channel);
+      if (!channelId) return jsonOut_({ ok:false, error:'channelId を解決できませんでした' }, p.callback);
+      const max   = toInt_(p.max, 5000);
+      const items = getUploadsItems_(channelId, max);
+      const ch    = getChannelInfo_(channelId);
+      return jsonOut_({ ok:true, type:'channel', channelId, count:items.length, channel:ch, items }, p.callback);
     }
-    </style>`;
-    const rowsHtml = rows.map((r,i)=>{
-      const v=line(r);
-      return `<tr>
-        <td class="ytp-num">#${num(i)}</td>
-        <td class="ytp-title">
-          <div><a href="${r.url}" target="_blank" rel="noopener">${escHtml(r.title)}</a></div>
-          <div class="ytp-meta">📅 ${escHtml(v.date)} ｜ 👍 ${v.likes} ｜ 💬 ${v.comms}</div>
-        </td>
-        <td class="ytp-hide-sm"><img class="ytp-thumb" src="${v.thumb}" alt=""></td>
-        <td class="ytp-views">▶️ <a href="${r.url}" target="_blank" rel="noopener">${v.views}回</a></td>
-        <td>平均/日：${v.avg}<br>推定増分：${v.grow}</td>
-      </tr>`;
-    }).join('');
-    return `
-      <section class="yt-pack">
-        ${css}
-        ${channelHtml}
-        <table class="ytp-table">
-          <colgroup>
-            <col style="width:64px"><col><col style="width:140px"><col style="width:140px"><col style="width:220px">
-          </colgroup>
-          <thead><tr><th>#</th><th>動画</th><th class="ytp-hide-sm">サムネ</th><th>視聴回数</th><th>統計</th></tr></thead>
-          <tbody>${rowsHtml}</tbody>
-        </table>
-      </section>`;
-  }
-
-  /* ---------- シンプル連番リスト（軽量） ---------- */
-  if (fmt==='html-list'){
-    const items = rows.map((r,i)=>{
-      const v=line(r);
-      return `<li style="margin:.4em 0">
-        <span style="font-weight:700;opacity:.7">#${num(i)}</span>
-        <a href="${r.url}" target="_blank" rel="noopener" style="font-weight:800"> ${escHtml(r.title)}</a>
-        — <a href="${r.url}" target="_blank" rel="noopener">${v.views}回</a>
-        — 👍 ${v.likes} — 💬 ${v.comms} — 平均/日 ${v.avg} — 推定 ${v.grow} — <span style="opacity:.7">${escHtml(v.date)}</span>
-      </li>`;
-    }).join('');
-    return `${channelHtml}<ol start="${startNo}" style="padding-left:1.2em">${items}</ol>`;
-  }
-
-  /* ---------- Markdown ---------- */
-  if (fmt==='md'){
-    const header = channel? `## [${channel.title||''}](${channel.url || (channel.id?`https://www.youtube.com/channel/${channel.id}`:'')})
-登録者数：${fmtNum(channel.subscriberCount)}　総再生回数：${fmtNum(channel.viewCount)}　動画数：${fmtNum(channel.videoCount)}
-` : '';
-    const lines = rows.map((r,i)=>{
-      const v=line(r);
-      return `${num(i)}. [${r.title}](${r.url}) — [${v.views}回](${r.url}) — 👍 ${v.likes} — 💬 ${v.comms} — 平均/日 ${v.avg} — 推定 ${v.grow} — ${v.date}`;
-    }).join('\n');
-    return header + lines;
-  }
-
-  /* ---------- TSV / CSV ---------- */
-  const sep = (fmt==='csv')? ',' : '\t';
-  const esc = (s)=> {
-    s=String(s??'');
-    if (fmt==='csv' && /[",\n]/.test(s)) s = `"${s.replace(/"/g,'""')}"`;
-    return s;
-  };
-  const head = ['No','URL','視聴回数','高評価','コメント','平均/日','推定増分(N日)','公開日','タイトル'];
-  const lines = [];
-  if (channel){
-    lines.push(
-      ['Channel Title', channel.title||''].map(esc).join(sep),
-      ['Channel URL', channel.url || (channel.id?`https://www.youtube.com/channel/${channel.id}`:'')].map(esc).join(sep),
-      ['Subscribers', fmtNum(channel.subscriberCount)].map(esc).join(sep),
-      ['Total Views', fmtNum(channel.viewCount)].map(esc).join(sep),
-      ['Video Count', fmtNum(channel.videoCount)].map(esc).join(sep),
-      ['', ''].map(esc).join(sep)
-    );
-  }
-  lines.push(head.map(esc).join(sep));
-  rows.forEach((r,i)=>{
-    const v=line(r);
-    lines.push([num(i), r.url, v.views, v.likes, v.comms, v.avg.replace('/日',''), v.grow.replace(/ .*$/,''), v.date, r.title].map(esc).join(sep));
-  });
-  return lines.join('\n');
-}
-
-/* ========= 便利関数 ========= */
-function getKeyOrThrow(){ const k=apiKeyInput.value.trim(); if(!k) throw new Error('APIキーを入力してください'); return k; }
-function busy(b,msg){ statusEl.textContent = b ? (msg||'処理中…') : ''; }
-function setCount(n){ countEl.textContent = (n==='—')?'—':String(Number(n)||0); }
-function toast(msg){ statusEl.textContent = msg; setTimeout(()=> statusEl.textContent='', 1600); }
-function clearOutput(){ outTA.value=''; setCount(0); renderPreviewIfHtml(''); }
-function clampInt(v,min,max){ v=Math.floor(v); return Math.max(min, Math.min(max, v)); }
-
-/* ========= YouTube API（ブラウザ直） ========= */
-async function runViaClient(key, raw, {max,since,sort}){
-  const channelId = await resolveChannelIdSmart(raw, key);
-  if (!channelId) throw new Error('チャンネルIDを解決できませんでした');
-  const [uploads, channel] = await Promise.all([ getUploadsPlaylistId(channelId, key), fetchChannelInfo(channelId, key) ]);
-  if (!uploads) throw new Error('アップロード済みプレイリストが見つかりませんでした');
-  const videoIds = await listPlaylistVideoIds(uploads, key, max);
-  const details  = await fetchVideosDetails(videoIds, key);
-  let rows = videoIds.map((id,i)=>{
-    const d=details.get(id)||{};
-    return { url:`https://www.youtube.com/watch?v=${id}`, videoId:id, viewCount:d.viewCount??null, likeCount:d.likeCount??null, commentCount:d.commentCount??null, title:d.title??'', publishedAt:d.publishedAt??'', channelId:d.channelId||'', __idx:i };
-  });
-  rows = applySinceAndSort(rows,{since,sort});
-  return { rows, channel };
-}
-function applySinceAndSort(rows,{since,sort}){
-  if (since){
-    const t0 = new Date(`${since}T00:00:00Z`).getTime();
-    if (isFinite(t0)) rows = rows.filter(r=>{ const t=new Date(r.publishedAt||0).getTime(); return isFinite(t)&&t>=t0; });
-  }
-  if (sort==='newest'||sort==='oldest'){
-    rows.sort((a,b)=>{ const ta=new Date(a.publishedAt||0).getTime(); const tb=new Date(b.publishedAt||0).getTime(); return sort==='newest'? (tb-ta):(ta-tb); });
-  }
-  return rows;
-}
-
-/* ========= GAS経由 ========= */
-async function runViaGAS(appUrl, channelInput, {max,since,sort}){
-  const url = new URL(appUrl);
-  url.searchParams.set('max', String(max));
-  if (since) url.searchParams.set('since', since);
-  if (/^UC[0-9A-Za-z_-]{22}$/.test(channelInput)) url.searchParams.set('channelId', channelInput);
-  else url.searchParams.set('channel', channelInput);
-
-  try{
-    const json = await fetchJson(url.toString());
-    return normalizeFromBackend(json, sort, since);
-  }catch(_){
-    const json = await jsonpFetch(url);
-    return normalizeFromBackend(json, sort, since);
+    if (p.playlistId){
+      const playlistId = String(p.playlistId).trim();
+      const max   = toInt_(p.max, 5000);
+      const items = getPlaylistItems_(playlistId, max);
+      return jsonOut_({ ok:true, type:'playlist', playlistId, count:items.length, items }, p.callback);
+    }
+    const help = [
+      '使い方:',
+      '  ?videoId=XXXXXXXXXXX',
+      '  ?channelId=UCxxxxxxxxxxxxxxxxxxxxxx [&max=5000]',
+      '  ?channel=@handle  または  ?channel=https://www.youtube.com/@handle [&max=5000]',
+      '  ?playlistId=PLxxxxxxxxxxxxxxxx [&max=5000]'
+    ].join('\n');
+    return textOut_(help);
+  }catch(err){
+    return jsonOut_({ ok:false, error: (err && err.message)||String(err) }, p.callback);
   }
 }
-function normalizeFromBackend(json, sort, since){
-  if (!json || json.ok===false) throw new Error(json?.error || 'GAS応答エラー');
-  let rows = (json.items||[]).map((it,i)=>({
-    url: it.url||'', videoId: (it.videoId||extractIdFromUrl(it.url)) || '', viewCount: it.viewCount!=null?Number(it.viewCount):null, likeCount: it.likeCount!=null?Number(it.likeCount):null, commentCount: it.commentCount!=null?Number(it.commentCount):null,
-    title: it.title||'', publishedAt: it.publishedAt||'', channelId: it.channelId||'', __idx:i
+
+/* ====== 出力ヘルパ ====== */
+function textOut_(s){ return ContentService.createTextOutput(String(s)); }
+function jsonOut_(obj, cb){
+  const body = JSON.stringify(obj, null, 2);
+  if (cb) return ContentService.createTextOutput(`${cb}(${body})`).setMimeType(ContentService.MimeType.JAVASCRIPT);
+  return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JSON);
+}
+function toInt_(v,d){ v=Number(v); if(!isFinite(v)||v<=0) return d; return Math.min(Math.floor(v),5000); }
+
+/* ====== 動画1本：整形テキスト ====== */
+function getVideoText_(videoId){
+  const key=getApiKey_();
+  const url='https://www.googleapis.com/youtube/v3/videos'
+    +'?part=snippet,statistics'+'&id='+encodeURIComponent(videoId)+'&key='+encodeURIComponent(key);
+  const j=httpGetJson_(url);
+  if(!j.items||!j.items.length) throw new Error('動画情報が見つかりませんでした。videoIdを確認してください。');
+  const v=j.items[0], sn=v.snippet||{}, st=v.statistics||{};
+  const title=sn.title||'', ch=sn.channelTitle||'', published = sn.publishedAt ? new Date(sn.publishedAt).toLocaleString('ja-JP') : '-';
+  const views=Number(st.viewCount||0).toLocaleString('ja-JP'), likes = st.likeCount!=null? Number(st.likeCount).toLocaleString('ja-JP'):'-';
+  return ['--- YouTube動画情報 ---',`タイトル: ${title}`,`チャンネル名: ${ch}`,`公開日時: ${published}`,'--------------------------',`再生回数: ${views} 回`,`高評価数: ${likes}`,'--------------------------'].join('\n');
+}
+
+/* ====== チャンネル全件 ====== */
+function getUploadsItems_(channelId, maxCount){
+  const uploadsId = getUploadsPlaylistId_(channelId);
+  if(!uploadsId) throw new Error('アップロード用プレイリストが見つかりませんでした');
+  const ids = listPlaylistVideoIds_(uploadsId, maxCount);
+  const vids = fetchVideosInfo_(ids);
+  return vids.map(v=>({
+    videoId:v.id,
+    url:'https://www.youtube.com/watch?v='+v.id,
+    title:(v.snippet&&v.snippet.title)||'',
+    publishedAt:(v.snippet&&v.snippet.publishedAt)||'',
+    viewCount:Number((v.statistics&&v.statistics.viewCount)||0),
+    likeCount: v.statistics && v.statistics.likeCount!=null ? Number(v.statistics.likeCount) : null,
+    commentCount: v.statistics && v.statistics.commentCount!=null ? Number(v.statistics.commentCount) : null,
+    channelId:(v.snippet&&v.snippet.channelId)||''
   }));
-  rows = applySinceAndSort(rows,{since,sort});
-  const channel = json.channel ? {
-    id: json.channel.id||'', title: json.channel.title||'', url: json.channel.url||'', avatar: json.channel.avatar||'',
-    subscriberCount: json.channel.subscriberCount!=null?Number(json.channel.subscriberCount):null,
-    viewCount: json.channel.viewCount!=null?Number(json.channel.viewCount):null,
-    videoCount: json.channel.videoCount!=null?Number(json.channel.videoCount):null
-  } : null;
-  return { rows, channel };
 }
-function extractIdFromUrl(u){
-  const m=String(u||'').match(/v=([0-9A-Za-z_-]{11})|youtu\.be\/([0-9A-Za-z_-]{11})|shorts\/([0-9A-Za-z_-]{11})/);
-  return (m && (m[1]||m[2]||m[3])) || '';
+function getUploadsPlaylistId_(channelId){
+  const cache=CacheService.getScriptCache(); const ck='uploads:'+channelId; const hit=cache.get(ck); if(hit) return hit;
+  const key=getApiKey_();
+  const url='https://www.googleapis.com/youtube/v3/channels'
+    +'?part=contentDetails'+'&id='+encodeURIComponent(channelId)+'&key='+encodeURIComponent(key);
+  const j=httpGetJson_(url);
+  const uploads=j.items && j.items[0]?.contentDetails?.relatedPlaylists?.uploads || null;
+  if(uploads) cache.put(ck, uploads, 21600);
+  return uploads;
 }
 
-/* ========= API 呼び出し群 ========= */
-function looksLikeUrl(s){ return /^https?:\/\//i.test(String(s||'')); }
-async function resolveChannelIdSmart(input, key){
-  const raw=String(input||'').trim(); if(!raw) return null;
-  if (/^UC[0-9A-Za-z_-]{22}$/.test(raw)) return raw;
-  if (/^[0-9A-Za-z_-]{11}$/.test(raw)){ const cid=await getChannelIdFromVideo(raw,key); if (cid) return cid; }
-  if (raw.startsWith('@')){ const cid=await searchChannelIdByHandle(raw.slice(1),key); if (cid) return cid; }
-  if (looksLikeUrl(raw)){
-    try{
-      const u=new URL(raw); const host=u.hostname.replace(/^www\./,''); const parts=u.pathname.replace(/\/+$/,'').split('/').filter(Boolean);
-      const vid=u.searchParams.get('v') || (['shorts','embed','live'].includes(parts[0])? parts[1] : null);
-      if (host==='youtu.be' && parts[0]){ const cid=await getChannelIdFromVideo(parts[0].slice(0,11),key); if (cid) return cid; }
-      if (vid){ const cid=await getChannelIdFromVideo(vid.slice(0,11),key); if (cid) return cid; }
-      const list=u.searchParams.get('list'); if (list){ const cid=await getChannelIdFromPlaylist(list,key); if (cid) return cid; }
-      const mCh=u.pathname.match(/\/channel\/(UC[0-9A-Za-z_-]{22})$/); if (mCh) return mCh[1];
-      const mHandle=u.pathname.match(/\/@([^/]+)$/); if (mHandle){ const cid=await searchChannelIdByHandle(mHandle[1],key); if (cid) return cid; }
-      const mCustom=u.pathname.match(/\/(c|user)\/([^/]+)$/); if (mCustom){ const cid=await searchChannelIdByQuery(mCustom[2],key); if (cid) return cid; }
-    }catch{}
-  }
-  return await searchChannelIdByQuery(raw,key);
+/* ====== プレイリスト全件 ====== */
+function getPlaylistItems_(playlistId, maxCount){
+  const ids = listPlaylistVideoIds_(playlistId, maxCount);
+  const vids = fetchVideosInfo_(ids);
+  return vids.map(v=>({
+    videoId:v.id,
+    url:'https://www.youtube.com/watch?v='+v.id,
+    title:(v.snippet&&v.snippet.title)||'',
+    publishedAt:(v.snippet&&v.snippet.publishedAt)||'',
+    viewCount:Number((v.statistics&&v.statistics.viewCount)||0),
+    likeCount: v.statistics && v.statistics.likeCount!=null ? Number(v.statistics.likeCount) : null,
+    commentCount: v.statistics && v.statistics.commentCount!=null ? Number(v.statistics.commentCount) : null,
+    channelId:(v.snippet&&v.snippet.channelId)||''
+  }));
 }
-
-async function fetchJson(u){
-  const res=await fetch(u,{cache:'no-store',mode:'cors',credentials:'omit'});
-  const ct=(res.headers.get('content-type')||'').toLowerCase(); const txt=await res.text();
-  if(!res.ok) throw new Error(`HTTP ${res.status} / ${txt.slice(0,200)}`);
-  if(!ct.includes('application/json')) throw new Error(`JSON以外の応答: ${ct} / ${txt.slice(0,160)}`);
-  return JSON.parse(txt);
-}
-function jsonpFetch(urlObj){
-  return new Promise((resolve,reject)=>{
-    const u=new URL(urlObj.toString());
-    const cb='__jsonp_cb_'+Date.now()+'_'+Math.floor(Math.random()*1e6);
-    u.searchParams.set('callback', cb);
-    const timer=setTimeout(()=>{cleanup();reject(new Error('JSONPタイムアウト'));},15000);
-    function cleanup(){ clearTimeout(timer); try{ delete window[cb]; }catch{} if(script&&script.parentNode) script.parentNode.removeChild(script); }
-    window[cb]=data=>{ cleanup(); resolve(data); };
-    const script=document.createElement('script'); script.src=u.toString();
-    script.onerror=()=>{ cleanup(); reject(new Error('JSONP読込失敗')); };
-    document.head.appendChild(script);
-  });
-}
-
-async function fetchChannelInfo(channelId, key){
-  const ep=new URL('https://www.googleapis.com/youtube/v3/channels');
-  ep.searchParams.set('part','snippet,statistics'); ep.searchParams.set('id',channelId); ep.searchParams.set('key',key);
-  const r=await fetch(ep); await assertOk(r,'channels(stats) API'); const j=await r.json();
-  const it=j.items?.[0]; if(!it) return null; const sn=it.snippet||{}, st=it.statistics||{};
-  return { id:it.id, title:sn.title||'', url:`https://www.youtube.com/channel/${it.id}`, avatar:sn.thumbnails?.default?.url||'',
-    subscriberCount: st.subscriberCount!=null? Number(st.subscriberCount):null,
-    viewCount: st.viewCount!=null? Number(st.viewCount):null,
-    videoCount: st.videoCount!=null? Number(st.videoCount):null };
-}
-
-async function getChannelIdFromVideo(videoId,key){
-  const ep=new URL('https://www.googleapis.com/youtube/v3/videos');
-  ep.searchParams.set('part','snippet'); ep.searchParams.set('id',videoId); ep.searchParams.set('key',key);
-  const r=await fetch(ep); await assertOk(r,'videos API'); const j=await r.json();
-  return j.items?.[0]?.snippet?.channelId || null;
-}
-async function getChannelIdFromPlaylist(playlistId,key){
-  const ep=new URL('https://www.googleapis.com/youtube/v3/playlists');
-  ep.searchParams.set('part','snippet'); ep.searchParams.set('id',playlistId); ep.searchParams.set('key',key);
-  const r=await fetch(ep); await assertOk(r,'playlists API'); const j=await r.json();
-  return j.items?.[0]?.snippet?.channelId || null;
-}
-async function searchChannelIdByHandle(handle,key){
-  const ep=new URL('https://www.googleapis.com/youtube/v3/search');
-  ep.searchParams.set('part','snippet'); ep.searchParams.set('type','channel'); ep.searchParams.set('q',handle);
-  ep.searchParams.set('maxResults','1'); ep.searchParams.set('key',key);
-  const r=await fetch(ep); await assertOk(r,'search(handle) API'); const j=await r.json();
-  return j.items?.[0]?.id?.channelId || null;
-}
-async function searchChannelIdByQuery(query,key){
-  const ep=new URL('https://www.googleapis.com/youtube/v3/search');
-  ep.searchParams.set('part','snippet'); ep.searchParams.set('type','channel'); ep.searchParams.set('q',query);
-  ep.searchParams.set('maxResults','1'); ep.searchParams.set('key',key);
-  const r=await fetch(ep); await assertOk(r,'search(query) API'); const j=await r.json();
-  return j.items?.[0]?.id?.channelId || null;
-}
-async function getUploadsPlaylistId(channelId,key){
-  const ep=new URL('https://www.googleapis.com/youtube/v3/channels');
-  ep.searchParams.set('part','contentDetails'); ep.searchParams.set('id',channelId); ep.searchParams.set('key',key);
-  const r=await fetch(ep); await assertOk(r,'channels API'); const j=await r.json();
-  return j.items?.[0]?.contentDetails?.relatedPlaylists?.uploads || null;
-}
-async function listPlaylistVideoIds(playlistId,key,maxCount){
-  let ids=[]; let pageToken='';
+function listPlaylistVideoIds_(playlistId, maxCount){
+  const key=getApiKey_(); let ids=[], pageToken='';
   while(ids.length<maxCount){
-    const ep=new URL('https://www.googleapis.com/youtube/v3/playlistItems');
-    ep.searchParams.set('part','contentDetails'); ep.searchParams.set('playlistId',playlistId);
-    ep.searchParams.set('maxResults','50'); if(pageToken) ep.searchParams.set('pageToken',pageToken); ep.searchParams.set('key',key);
-    const r=await fetch(ep); await assertOk(r,'playlistItems API'); const j=await r.json();
-    for (const it of (j.items||[])){ const id=it.contentDetails?.videoId; if(id) ids.push(id); if(ids.length>=maxCount) break; }
-    pageToken=j.nextPageToken||''; if(!pageToken) break;
-    busy(true, `取得中… ${ids.length}件`);
+    const url='https://www.googleapis.com/youtube/v3/playlistItems'
+      +'?part=contentDetails'+'&playlistId='+encodeURIComponent(playlistId)
+      +'&maxResults=50'+(pageToken? '&pageToken='+encodeURIComponent(pageToken):'')
+      +'&key='+encodeURIComponent(key);
+    const j=httpGetJson_(url);
+    (j.items||[]).forEach(it=>{ const id=it?.contentDetails?.videoId; if(id) ids.push(id); });
+    if(!j.nextPageToken || ids.length>=maxCount) break;
+    pageToken=j.nextPageToken;
   }
-  return ids;
+  return ids.slice(0, maxCount);
 }
-async function fetchVideosDetails(videoIds,key){
-  const map=new Map();
+
+/* ====== まとめて動画情報 ====== */
+function fetchVideosInfo_(videoIds){
+  if(!videoIds.length) return [];
+  const key=getApiKey_(); const out=[];
   for(let i=0;i<videoIds.length;i+=50){
     const chunk=videoIds.slice(i,i+50);
-    const ep=new URL('https://www.googleapis.com/youtube/v3/videos');
-    ep.searchParams.set('part','snippet,statistics'); ep.searchParams.set('id',chunk.join(',')); ep.searchParams.set('key',key);
-    const r=await fetch(ep); await assertOk(r,'videos(details) API'); const j=await r.json();
-    for (const it of (j.items||[])){
-      map.set(it.id,{
-        title: it.snippet?.title ?? '',
-        viewCount: it.statistics?.viewCount!=null? Number(it.statistics.viewCount):null,
-        likeCount: it.statistics?.likeCount!=null? Number(it.statistics.likeCount):null,
-        commentCount: it.statistics?.commentCount!=null? Number(it.statistics.commentCount):null,
-        publishedAt: it.snippet?.publishedAt ?? '',
-        channelId: it.snippet?.channelId || ''
-      });
-    }
+    const url='https://www.googleapis.com/youtube/v3/videos'
+      +'?part=snippet,statistics'+'&id='+encodeURIComponent(chunk.join(','))+'&key='+encodeURIComponent(key);
+    const j=httpGetJson_(url); (j.items||[]).forEach(v=>out.push(v));
   }
-  return map;
+  return out;
 }
 
-/* ========= 小物 ========= */
-async function assertOk(res,label){
-  if(res.ok) return;
-  let detail=''; try{ detail=' / '+(await res.text()).slice(0,200);}catch{}
-  throw new Error(`${label} エラー: ${res.status}${detail}`);
-}
-function validateExecUrlOrThrow(s){
-  const m=String(s||'').match(/https?:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec/);
-  if(!m) throw new Error('GASの APP_URL（/exec）を正しく入力してください');
-  return m[0];
+/* ====== チャンネル統計 ====== */
+function getChannelInfo_(channelId){
+  const key=getApiKey_();
+  const url='https://www.googleapis.com/youtube/v3/channels'
+    +'?part=snippet,statistics'+'&id='+encodeURIComponent(channelId)+'&key='+encodeURIComponent(key);
+  const j=httpGetJson_(url);
+  const it=j.items && j.items[0]; if(!it) return null;
+  const sn=it.snippet||{}, st=it.statistics||{};
+  return {
+    id:it.id, title:sn.title||'', url:'https://www.youtube.com/channel/'+it.id,
+    subscriberCount: st.subscriberCount!=null? Number(st.subscriberCount):null,
+    viewCount: st.viewCount!=null? Number(st.viewCount):null,
+    videoCount: st.videoCount!=null? Number(st.videoCount):null
+  };
 }
 
-/* ========= 整形モード：URL→id抽出 ========= */
-function extractVideoIds(text){
-  const set=new Set(); const tokens=String(text||'').split(/[\s\n\r\t]+/).filter(Boolean);
-  const re=/(?:v=|vi=|v%3D|youtu\.be\/|shorts\/|embed\/)([0-9A-Za-z_-]{11})/;
-  for (const tk of tokens){
-    if(/^https?:\/\//i.test(tk)){
-      try{
-        const u=new URL(tk); const host=u.hostname.replace(/^www\./,''); const parts=u.pathname.replace(/\/+$/,'').split('/').filter(Boolean);
-        let id=u.searchParams.get('v'); if(!id && host==='youtu.be') id=parts[0]; if(!id && ['shorts','embed','live'].includes(parts[0])) id=parts[1];
-        if(id && /^[0-9A-Za-z_-]{11}$/.test(id)){ set.add(id); continue; }
-      }catch{}
-      const m=tk.match(re); if(m&&m[1]){ set.add(m[1]); continue; }
-    }
-    if(/^[0-9A-Za-z_-]{11}$/.test(tk)) set.add(tk);
-    else { const m=tk.match(re); if(m&&m[1]) set.add(m[1]); }
+/* ====== 入力解決 ====== */
+function resolveChannelId_(input){
+  const raw=String(input||'').trim(); if(!raw) return null;
+  if(/^UC[0-9A-Za-z_-]{22}$/.test(raw)) return raw;
+  if(raw.startsWith('@')) return channelIdBySearch_(raw.slice(1));
+  if(/^https?:\/\//i.test(raw)){
+    try{
+      const u=new URL(raw); const host=u.hostname.replace(/^www\./,''), path=u.pathname.replace(/\/+$/,''), parts=path.split('/').filter(Boolean);
+      const vid=u.searchParams.get('v') || (['shorts','embed','live'].includes(parts[0])? parts[1] : null);
+      if(host==='youtu.be' && parts[0]) return channelIdFromVideo_(parts[0].slice(0,11));
+      if(vid) return channelIdFromVideo_(vid.slice(0,11));
+      const list=u.searchParams.get('list'); if(list) return channelIdFromPlaylist_(list);
+      const mCh=path.match(/\/channel\/(UC[0-9A-Za-z_-]{22})$/); if(mCh) return mCh[1];
+      const mHandle=path.match(/\/@([^/]+)$/); if(mHandle) return channelIdBySearch_(mHandle[1]);
+      const mCustom=path.match(/\/(c|user)\/([^/]+)$/); if(mCustom) return channelIdBySearch_(mCustom[2]);
+    }catch(e){}
   }
-  return Array.from(set);
+  // 11桁は動画IDの可能性
+  if(/^[0-9A-Za-z_-]{11}$/.test(raw)) return channelIdFromVideo_(raw);
+  return channelIdBySearch_(raw);
+}
+function channelIdFromVideo_(videoId){
+  const key=getApiKey_(); const url='https://www.googleapis.com/youtube/v3/videos'
+    +'?part=snippet'+'&id='+encodeURIComponent(videoId)+'&key='+encodeURIComponent(key);
+  const j=httpGetJson_(url); return j.items && j.items[0]?.snippet?.channelId || null;
+}
+function channelIdFromPlaylist_(playlistId){
+  const key=getApiKey_(); const url='https://www.googleapis.com/youtube/v3/playlists'
+    +'?part=snippet'+'&id='+encodeURIComponent(playlistId)+'&key='+encodeURIComponent(key);
+  const j=httpGetJson_(url); return j.items && j.items[0]?.snippet?.channelId || null;
+}
+function channelIdBySearch_(query){
+  const cache=CacheService.getScriptCache(); const ck='handle:'+query; const hit=cache.get(ck); if(hit) return hit;
+  const key=getApiKey_(); const url='https://www.googleapis.com/youtube/v3/search'
+    +'?part=snippet&type=channel&maxResults=1&q='+encodeURIComponent(query)+'&key='+encodeURIComponent(key);
+  const j=httpGetJson_(url); const cid=j.items && j.items[0]?.id?.channelId || null;
+  if(cid) cache.put(ck, cid, 21600);
+  return cid;
 }
 
-/* ========= 便利ボタン ========= */
-copyBtn.onclick = async () => {
-  try{ await navigator.clip
+/* ====== HTTP ====== */
+function httpGetJson_(url){
+  const res=UrlFetchApp.fetch(url,{muteHttpExceptions:true}); const code=res.getResponseCode(); const body=res.getContentText();
+  if(code<200||code>=300) throw new Error('HTTP '+code+' / '+body.slice(0,300));
+  return JSON.parse(body);
+}
