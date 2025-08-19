@@ -1,32 +1,34 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>YouTube リンク収集（テキスト出力）</title>
+<title>YouTube リンク収集（URL + 視聴回数 + タイトル）</title>
 <style>
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans JP",sans-serif;margin:24px;line-height:1.7}
   h1{font-size:1.2rem;margin:0 0 12px}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0}
   input,button{padding:8px}
   input[type="number"]{width:120px}
-  textarea{width:100%;min-height:220px;padding:10px}
+  textarea{width:100%;min-height:260px;padding:10px}
   .muted{color:#6b7280}
 </style>
 
-<h1>YouTube リンクをテキストで取得</h1>
+<h1>YouTube リンクをテキストで取得（URL<TAB>視聴回数<TAB>タイトル）</h1>
+
 <script>
-// 追加
-const DEFAULT_API_KEY = 'AIzaSyAsoGsbekSs5kfzjfIdxmuOdo44hwDqq3g';
+// 必要なら既定のAPIキーを入れてください（公開環境では空が安全）
+const DEFAULT_API_KEY = '';
 </script>
+
 <div class="row">
   <label>APIキー：</label>
   <input id="apiKey" placeholder="YouTube Data API v3 の APIキー" style="min-width:260px;flex:1">
   <button id="saveKey">保存</button>
-  <span class="muted">（ローカル保存）</span>
+  <span class="muted">（ブラウザにローカル保存）</span>
 </div>
 
 <div class="row">
   <label>チャンネル：</label>
-  <input id="channel" placeholder="@handle / UCxxxxxxxxxxxxxxxxxxxxxx / https://www.youtube.com/@handle など" style="min-width:320px;flex:1">
+  <input id="channel" placeholder="@handle / UCxxxxxxxxxxxxxxxxxxxxxx / https://www.youtube.com/@handle / 動画URL / プレイリストURL" style="min-width:320px;flex:1">
 </div>
 
 <div class="row">
@@ -36,8 +38,8 @@ const DEFAULT_API_KEY = 'AIzaSyAsoGsbekSs5kfzjfIdxmuOdo44hwDqq3g';
   <span id="status" class="muted"></span>
 </div>
 
-<p class="muted">出力（1行=1リンク）</p>
-<textarea id="out" placeholder="ここに動画URLが改行区切りで出ます"></textarea>
+<p class="muted">出力（1行= <code>URL</code> [Tab] <code>視聴回数</code> [Tab] <code>タイトル</code>）※スプレッドシートに貼れば自動分割されます</p>
+<textarea id="out" placeholder="ここに結果が出ます（URL\t視聴回数\tタイトル）"></textarea>
 
 <script>
 const apiKeyInput = document.getElementById('apiKey');
@@ -48,7 +50,7 @@ const outTA        = document.getElementById('out');
 const statusEl     = document.getElementById('status');
 
 // --- 保存/復元 ---
-apiKeyInput.value = localStorage.getItem('yt_api_key') || '';
+apiKeyInput.value = localStorage.getItem('yt_api_key') || DEFAULT_API_KEY || '';
 document.getElementById('saveKey').onclick = () => {
   localStorage.setItem('yt_api_key', apiKeyInput.value.trim());
   flash('APIキーを保存しました');
@@ -72,15 +74,22 @@ runBtn.onclick = async () => {
 
     const videoIds = await listPlaylistVideoIds(uploads, key, max);
 
-　　
+    // ここで詳細（タイトル/視聴回数）をまとめ取得
+    const detailsMap = await fetchVideosDetails(videoIds, key);
 
-    
-    const urls = videoIds.map(id => `https://www.youtube.com/watch?v=${id}`);
-    outTA.value = urls.join('\n');
-    flash(`${urls.length}件のリンクを取得`);
+    // 出力：URL<TAB>視聴回数<TAB>タイトル
+    const lines = videoIds.map(id => {
+      const d = detailsMap.get(id) || {};
+      const url = `https://www.youtube.com/watch?v=${id}`;
+      const views = (d.viewCount != null) ? Number(d.viewCount).toLocaleString('ja-JP') : '';
+      const title = d.title || '';
+      return `${url}\t${views}\t${title}`;
+    });
+    outTA.value = lines.join('\n');
+    flash(`${videoIds.length}件のURL＋視聴回数＋タイトルを取得`);
+
   } catch (e) {
     console.error(e);
-    // APIエラー本文があれば見せる
     alert('エラー: ' + (e.message || e));
   } finally {
     setBusy(false);
@@ -252,23 +261,30 @@ async function listPlaylistVideoIds(playlistId, key, maxCount) {
   }
   return ids;
 }
-// 取得したIDで詳細情報をまとめ取り
-const detailsMap = await fetchVideosDetails(videoIds, key);
 
-// 出力：URL<TAB>視聴回数<TAB>タイトル（1行1本）
-const lines = videoIds.map(id => {
-  const d = detailsMap.get(id) || {};
-  const url = `https://www.youtube.com/watch?v=${id}`;
-  const views = (d.viewCount != null) ? Number(d.viewCount).toLocaleString('ja-JP') : '';
-  const title = d.title || '';
-  return `${url}\t${views}\t${title}`;
-});
-outTA.value = lines.join('\n');
-flash(`${videoIds.length}件のリンク＋視聴回数＋タイトルを取得`);
+// 追加：動画の詳細（タイトル/視聴回数）をまとめ取得
+async function fetchVideosDetails(videoIds, key) {
+  const map = new Map();
+  for (let i = 0; i < videoIds.length; i += 50) {
+    const chunk = videoIds.slice(i, i + 50);
+    const ep = new URL('https://www.googleapis.com/youtube/v3/videos');
+    ep.searchParams.set('part', 'snippet,statistics');
+    ep.searchParams.set('id', chunk.join(','));
+    ep.searchParams.set('key', key);
 
-
-
-  
+    const r = await fetch(ep);
+    await assertOk_(r, 'videos(details) API');
+    const j = await r.json();
+    for (const it of (j.items || [])) {
+      map.set(it.id, {
+        title: it.snippet?.title ?? '',
+        viewCount: it.statistics?.viewCount != null ? Number(it.statistics.viewCount) : null,
+        publishedAt: it.snippet?.publishedAt ?? ''
+      });
+    }
+  }
+  return map;
+}
 
 // --- 共通: エラー本文を拾って見やすく ---
 async function assertOk_(res, label){
@@ -280,5 +296,5 @@ async function assertOk_(res, label){
 
 // --- UI helpers ---
 function setBusy(b, msg){ runBtn.disabled = b; statusEl.textContent = b ? (msg || '取得中…') : '' }
-function flash(msg){ statusEl.textContent = msg; setTimeout(()=> statusEl.textContent='', 1500) }
+function flash(msg){ statusEl.textContent = msg; setTimeout(()=> statusEl.textContent='', 1600) }
 </script>
