@@ -1,506 +1,121 @@
-<!doctype html>
-
-<html lang="ja">
-
-<head>
-
-  <meta charset="utf-8">
-
-  <title>シート読み取りビューア（テンプレ集）</title>
-
-  <style>
-
-    :root{--bg:#f9f9f9;--card:#fff;--muted:#667085;--primary:#2196F3;--primary-h:#1976d2;--bd:#ddd}
-
-    *{box-sizing:border-box}
-
-    body{font-family:system-ui, sans-serif; margin:0; background:var(--bg); color:#111}
-
-    header{padding:20px}
-
-    h1{margin:0 0 8px}
-
-    .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
-
-    input,button{padding:8px 10px; font-size:14px}
-
-    label{display:flex; align-items:center; gap:6px}
-
-    main{padding:0 20px 24px}
-
-    .panel{background:var(--card); border:1px solid var(--bd); border-radius:8px; padding:12px; margin:0 0 14px}
-
-    #status{color:var(--muted)}
-
-    #error{color:#b00020}
-
-    details.panel{padding:0}
-
-    details>summary{padding:12px; cursor:pointer; font-weight:600; outline:none}
-
-    .template{margin:10px 12px 14px; padding:12px; border-left:3px solid var(--primary); background:#f1f8ff; border-radius:4px}
-
-    .title{font-weight:700; margin-bottom:6px}
-
-    .meta{font-size:12px; color:var(--muted); margin-bottom:6px}
-
-    pre{white-space:pre-wrap; background:#f8fafc; border:1px solid #eee; padding:10px; margin:6px 0 8px}
-
-    .copy-btn{margin-top:2px; padding:6px 10px; font-size:12px; border:none; background:var(--primary); color:#fff; border-radius:4px; cursor:pointer}
-
-    .copy-btn:hover{background:var(--primary-h)}
-
-    table{border-collapse:collapse; width:100%; margin-top:6px}
-
-    th,td{border:1px solid #ddd; padding:8px; font-size:14px; vertical-align:top}
-
-    th{background:#f5f7fa; text-align:left}
-
-    td{white-space:pre-line; overflow-wrap:anywhere}
-
-    .muted{color:var(--muted)}
-
-    .controls small{color:var(--muted)}
-
-  </style>
-
-</head>
-
-<body>
-
-  <header>
-
-    <h1>スプレッドシート読み取り → テンプレ集</h1>
-
-    <div class="row controls">
-
-      <label>APP_URL:https://script.google.com/macros/s/AKfycbxLZMFHhVkxa5CT95iFKJt8uUDhQxgKZhQxnruqC_iv09iKtm5sU7w9PZQqWj7fi41a/exec
-
-        <!-- 必ず /exec を入れる -->
-
-        <input id="app" size="58" placeholder="https://docs.google.com/spreadsheets/d/1lD1sYHj7ccwBUwaTJ6T3OZyBNUgn-fcv7v1kErmXFqs/edit?gid=1043633112#gid=1043633112">
-
-      </label>
-
-      <label>シート（タブ/URL/gid）:
-
-        <input id="sheet" size="18" placeholder="例: シート1 / ?gid=0 を含むURL / 0">
-
-      </label>
-
-      <label>範囲:
-
-        <input id="range" size="10" value="A1:Z999">
-
-      </label>
-
-      <button id="load">取得</button>
-
-      <small class="muted">※ APP_URLはGASの/exec。シート欄はタブ名 or gid or シートURL( gid付き )</small>
-
-    </div>
-
-  </header>
-
-
-
-  <main>
-
-    <div id="status" class="panel muted"></div>
-
-    <div id="error" class="panel" style="display:none"></div>
-
-
-
-    <!-- テンプレUI（カテゴリでまとめる） -->
-
-    <div id="templates"></div>
-
-
-
-    <!-- 任意: 生JSONとテーブルビュー -->
-
-    <details class="panel" open>
-
-      <summary>生JSON</summary>
-
-      <pre id="raw">-</pre>
-
-    </details>
-
-
-
-    <details class="panel">
-
-      <summary>テーブルビュー（デバッグ用途）</summary>
-
-      <div id="table"></div>
-
-    </details>
-
-  </main>
-
-
-
-  <script>
-
-  document.getElementById('load').addEventListener('click', load);
-
-
-
-  function $(id){ return document.getElementById(id); }
-
-  function showStatus(msg){ $('status').textContent = msg || ''; }
-
-  function showError(msg){ const el=$('error'); el.style.display = msg ? 'block':'none'; el.textContent = msg||''; }
-
-
-
-  function assertExecUrl(app){
-
-    let u;
-
-    try{ u = new URL(app); }catch{ throw new Error('APP_URL が不正です（https://…/exec を指定）'); }
-
-    if (u.hostname !== 'script.google.com' || !/\/exec\/?$/.test(u.pathname)) {
-
-      throw new Error('APP_URL は Apps Script の /exec URL を指定してください（スプレッドシートのURLではありません）。');
-
-    }
-
-    return u;
-
-  }
-
-
-
-  async function load(){
-
-    showError('');
-
-    $('table').innerHTML = '';
-
-    $('raw').textContent = '-';
-
-    $('templates').innerHTML = '';
-
-    const app   = $('app').value.trim();
-
-    const sheet = $('sheet').value.trim();
-
-    const range = $('range').value.trim();
-
-
-
-    if(!app){ return showError('APP_URL（/exec）を入力してください'); }
-
-    if(/\/dev\/?$/.test(app)){ showStatus('注意: /dev は認証が必要で失敗しがちです。/exec を使ってください。'); }
-
-
-
-    let url;
-
-    try{ url = assertExecUrl(app); }
-
-    catch(e){ showError(e.message); return; }
-
-
-
-    url.searchParams.set('range', range || 'A1:Z999');
-
-
-
-    // シート欄：URL/gid/名前 いずれでもOK
-
-    if (sheet) {
-
-      const isUrl = /^https?:\/\//.test(sheet);
-
-      const gidMatch = sheet.match(/[?&]gid=(\d+)/);
-
-      if (gidMatch) {
-
-        url.searchParams.set('gid', gidMatch[1]);
-
-      } else if (!isUrl && /^\d+$/.test(sheet)) {
-
-        url.searchParams.set('gid', sheet);
-
-      } else if (!isUrl) {
-
-        url.searchParams.set('sheet', sheet);
-
-      } else {
-
-        showStatus('URLに gid が無い場合は、タブ名（例：シート1）を指定してください。');
-
-      }
-
-    }
-
-
-
-    showStatus('読み込み中…');
-
-
-
-    // まずJSON、その後JSONPフォールバック
-
-    let jsonErr = null;
-
-    try{
-
-      const json = await fetchJson(url.toString());
-
-      return renderSafe(json);
-
-    }catch(e1){ jsonErr = e1; }
-
-
-
-    try{
-
-      const json = await jsonpFetch(url);
-
-      return renderSafe(json);
-
-    }catch(e2){
-
-      showStatus('');
-
-      showError(`エラー: JSON=${jsonErr?.message || jsonErr}; JSONP=${e2?.message || e2}`);
-
-    }
-
-  }
-
-
-
-  function renderSafe(json){
-
-    try{ render(json); }
-
-    catch(err){ showStatus(''); showError('描画エラー: ' + (err?.message || err)); }
-
-  }
-
-
-
-  function render(json){
-
-    $('raw').textContent = JSON.stringify(json, null, 2);
-
-    if(json?.error){ throw new Error(json.error); }
-
-
-
-    const items = Array.isArray(json?.items) ? json.items : [];
-
-    showStatus(`取得: ${json?.count ?? items.length} 行（sheet=${json?.sheet ?? '-'} / range=${json?.range ?? '-' }）`);
-
-
-
-    // テンプレUIにレンダリング（title / category / tags / body を想定）
-
-    renderTemplates(items);
-
-
-
-    // デバッグのための簡易テーブル
-
-    if(items.length){
-
-      const headerSet = new Set(); for (const o of items) Object.keys(o||{}).forEach(k=>headerSet.add(k));
-
-      const headers = Array.from(headerSet);
-
-      const thead = '<thead><tr>' + headers.map(h=>`<th>${esc(h)}</th>`).join('') + '</tr></thead>';
-
-      const rows  = items.map(o => '<tr>'+headers.map(h=>`<td>${esc(o?.[h] ?? '')}</td>`).join('')+'</tr>').join('');
-
-      $('table').innerHTML = `<table>${thead}<tbody>${rows}</tbody></table>`;
-
-    }else{
-
-      $('table').innerHTML = '<p>データがありません。</p>';
-
-    }
-
-  }
-
-
-
-  function renderTemplates(items){
-
-    const container = $('templates');
-
-    container.innerHTML = '';
-
-    if(!items.length){ container.innerHTML = '<div class="panel">テンプレがありません。</div>'; return; }
-
-
-
-    // category ごとにまとめる
-
-    const grouped = {};
-
-    for(const t of items){
-
-      const cat = (t.category || '未分類').trim();
-
-      if(!grouped[cat]) grouped[cat] = [];
-
-      grouped[cat].push(t);
-
-    }
-
-
-
-    for(const cat of Object.keys(grouped)){
-
-      const details = document.createElement('details');
-
-      details.className = 'panel';
-
-      const summary = document.createElement('summary');
-
-      summary.textContent = cat;
-
-      details.appendChild(summary);
-
-
-
-      for(const t of grouped[cat]){
-
-        const div = document.createElement('div');
-
-        div.className = 'template';
-
-
-
-        const title = document.createElement('div');
-
-        title.className = 'title';
-
-        title.textContent = t.title ?? '(no title)';
-
-
-
-        const meta = document.createElement('div');
-
-        meta.className = 'meta';
-
-        const tags = (t.tags || '').toString();
-
-        meta.textContent = tags ? `tags: ${tags}` : 'tags: -';
-
-
-
-        const body = document.createElement('pre');
-
-        body.textContent = (t.body ?? '').toString();
-
-
-
-        const btn = document.createElement('button');
-
-        btn.className = 'copy-btn';
-
-        btn.textContent = 'コピー';
-
-        btn.addEventListener('click', async () => {
-
-          try{
-
-            await navigator.clipboard.writeText((t.body ?? '').toString());
-
-            btn.textContent = '✅ コピー済み';
-
-            setTimeout(()=> btn.textContent='コピー', 1500);
-
-          }catch{
-
-            btn.textContent = '❌ コピー失敗';
-
-            setTimeout(()=> btn.textContent='コピー', 1500);
-
-          }
-
-        });
-
-
-
-        div.appendChild(title);
-
-        div.appendChild(meta);
-
-        div.appendChild(body);
-
-        div.appendChild(btn);
-
-        details.appendChild(div);
-
-      }
-
-      container.appendChild(details);
-
-    }
-
-  }
-
-
-
-  async function fetchJson(u){
-
-    const res = await fetch(u, { cache:'no-store', mode:'cors', credentials:'omit' });
-
-    const ct  = (res.headers.get('content-type')||'').toLowerCase();
-
-    const text = await res.text();
-
-    if(!res.ok) throw new Error(res.status + ' ' + res.statusText + ' / ' + text.slice(0,220));
-
-    if(!ct.includes('application/json')) throw new Error('JSON以外の応答: ' + ct + ' / ' + text.slice(0,160));
-
-    return JSON.parse(text);
-
-  }
-
-
-
-  function jsonpFetch(urlObj){
-
-    return new Promise((resolve, reject) => {
-
-      const cb = '__jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random()*1e6);
-
-      urlObj.searchParams.set('callback', cb);
-
-      const timer = setTimeout(() => { cleanup(); reject(new Error('JSONPタイムアウト')); }, 15000);
-
-      function cleanup(){ clearTimeout(timer); try{ delete window[cb]; }catch{} if (script && script.parentNode) script.parentNode.removeChild(script); }
-
-      window[cb] = data => { cleanup(); resolve(data); };
-
-      const script = document.createElement('script');
-
-      script.src = urlObj.toString();
-
-      script.onerror = () => { cleanup(); reject(new Error('JSONP読込失敗')); };
-
-      document.head.appendChild(script);
-
-    });
-
-  }
-
-
-
-  function esc(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-
-  </script>
-
-</body>
-
-</html>
-
+<script>
+// 入力: @handle / UC… / /channel/… / /c/… / /user/… / 動画URL / shorts URL / プレイリストURL / 11桁ID など
+// 出力: チャンネルID（UCから始まる文字列） or null
+async function resolveChannelIdSmart(input, key) {
+  const raw = (input || '').trim();
+
+  // 1) すでに UC… なら即返す
+  if (/^UC[0-9A-Za-z_-]{22}$/.test(raw)) return raw;
+
+  // 2) 11桁の動画IDだけ来た場合
+  if (/^[0-9A-Za-z_-]{11}$/.test(raw)) {
+    const cid = await getChannelIdFromVideo(raw, key);
+    if (cid) return cid;
+  }
+
+  // 3) URLとして解釈してみる
+  try {
+    const u = new URL(raw);
+    const host = u.hostname.replace(/^www\./,'');
+    const path = u.pathname.replace(/\/+$/,'');
+    const parts = path.split('/').filter(Boolean);
+
+    // watch?v=VIDEO, shorts/VIDEO, embed/VIDEO, live/VIDEO → 動画IDから逆引き
+    const vid = u.searchParams.get('v') || (['shorts','embed','live'].includes(parts[0]) ? parts[1] : null);
+    if (vid) {
+      const cid = await getChannelIdFromVideo(vid.slice(0,11), key);
+      if (cid) return cid;
+    }
+
+    // playlist?list=PLAYLIST → プレイリストから逆引き
+    const list = u.searchParams.get('list');
+    if (list) {
+      const cid = await getChannelIdFromPlaylist(list, key);
+      if (cid) return cid;
+    }
+
+    // /channel/UC... → 直接取得
+    const mCh = path.match(/\/channel\/(UC[0-9A-Za-z_-]{22})$/);
+    if (mCh) return mCh[1];
+
+    // /@handle → 検索で解決
+    const mHandle = path.match(/\/@([^/]+)$/);
+    if (mHandle) {
+      const cid = await searchChannelIdByHandle(mHandle[1], key);
+      if (cid) return cid;
+    }
+
+    // /c/custom や /user/legacy → 検索で解決（旧URL）
+    const mCustom = path.match(/\/(c|user)\/([^/]+)$/);
+    if (mCustom) {
+      const cid = await searchChannelIdByQuery(mCustom[2], key);
+      if (cid) return cid;
+    }
+
+    // youtu.be/VIDEO → 動画IDから逆引き
+    if (host === 'youtu.be' && parts[0]) {
+      const cid = await getChannelIdFromVideo(parts[0].slice(0,11), key);
+      if (cid) return cid;
+    }
+  } catch(_) { /* URLでない → 次へ */ }
+
+  // 4) @handle 文字列
+  if (raw.startsWith('@')) {
+    const cid = await searchChannelIdByHandle(raw.slice(1), key);
+    if (cid) return cid;
+  }
+
+  // 5) 最後の手段：キーワード検索
+  return await searchChannelIdByQuery(raw, key);
+}
+
+// ---- 補助API呼び出し ----
+async function getChannelIdFromVideo(videoId, key) {
+  const ep = new URL('https://www.googleapis.com/youtube/v3/videos');
+  ep.searchParams.set('part','snippet');
+  ep.searchParams.set('id', videoId);
+  ep.searchParams.set('key', key);
+  const r = await fetch(ep);
+  if (!r.ok) return null;
+  const j = await r.json();
+  return j.items?.[0]?.snippet?.channelId || null;
+}
+
+async function getChannelIdFromPlaylist(playlistId, key) {
+  const ep = new URL('https://www.googleapis.com/youtube/v3/playlists');
+  ep.searchParams.set('part','snippet');
+  ep.searchParams.set('id', playlistId);
+  ep.searchParams.set('key', key);
+  const r = await fetch(ep);
+  if (!r.ok) return null;
+  const j = await r.json();
+  return j.items?.[0]?.snippet?.channelId || null;
+}
+
+async function searchChannelIdByHandle(handle, key) {
+  // シンプルに検索（type=channel）。必要なら厳密化のため後段で channels.list を当てて customUrl を照合する実装にも変更可
+  const ep = new URL('https://www.googleapis.com/youtube/v3/search');
+  ep.searchParams.set('part','snippet');
+  ep.searchParams.set('type','channel');
+  ep.searchParams.set('q', handle);
+  ep.searchParams.set('maxResults','1');
+  ep.searchParams.set('key', key);
+  const r = await fetch(ep);
+  if (!r.ok) return null;
+  const j = await r.json();
+  return j.items?.[0]?.id?.channelId || null;
+}
+
+async function searchChannelIdByQuery(query, key) {
+  const ep = new URL('https://www.googleapis.com/youtube/v3/search');
+  ep.searchParams.set('part','snippet');
+  ep.searchParams.set('type','channel');
+  ep.searchParams.set('q', query);
+  ep.searchParams.set('maxResults','1');
+  ep.searchParams.set('key', key);
+  const r = await fetch(ep);
+  if (!r.ok) return null;
+  const j = await r.json();
+  return j.items?.[0]?.id?.channelId || null;
+}
+</script>
