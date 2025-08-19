@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>YouTube 一括取得・整形（連番＋リンク＋チャンネル統計）</title>
+<title>YouTube 一括取得・整形（連番＋リンク＋チャンネル統計＋並び替え）</title>
 <style>
   :root{--muted:#6b7280;--bd:#e5e7eb}
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans JP",sans-serif;margin:24px;line-height:1.7}
@@ -19,7 +19,7 @@
   .preview{border:1px dashed var(--bd);border-radius:10px;padding:12px;margin-top:8px}
 </style>
 
-<h1>YouTube 一括取得・整形（連番＋リンク＋チャンネル統計）</h1>
+<h1>YouTube 一括取得・整形（連番＋リンク＋チャンネル統計＋並び替え）</h1>
 
 <script>
 // 公開環境では空が安全。ローカル用途のみ埋めてもOK
@@ -73,10 +73,10 @@ const DEFAULT_API_KEY = '';
     <input id="limit" type="number" value="200" min="1" max="5000">
     <label>公開日 since：</label>
     <input id="since" type="date">
-    <label>並び順：</label>
+    <label>取得時の並び：</label>
     <select id="sort">
-      <option value="newest" selected>新しい順</option>
-      <option value="oldest">古い順</option>
+      <option value="newest" selected>新しい順（公開日）</option>
+      <option value="oldest">古い順（公開日）</option>
       <option value="none">そのまま</option>
     </select>
   </div>
@@ -92,11 +92,11 @@ const DEFAULT_API_KEY = '';
   <div class="row">
     <label>公開日 since：</label>
     <input id="since2" type="date">
-    <label>並び順：</label>
+    <label>取得時の並び：</label>
     <select id="sort2">
       <option value="none" selected>入力順のまま</option>
-      <option value="newest">新しい順</option>
-      <option value="oldest">古い順</option>
+      <option value="newest">新しい順（公開日）</option>
+      <option value="oldest">古い順（公開日）</option>
     </select>
   </div>
   <div class="row">
@@ -115,11 +115,21 @@ const DEFAULT_API_KEY = '';
       <option value="tsv">TSV（表形式）</option>
       <option value="csv">CSV（表形式）</option>
     </select>
+
+    <!-- ★ 追加：整形後並び替え -->
+    <label>整形後の並び替え：</label>
+    <select id="postSort">
+      <option value="none" selected>入力順のまま</option>
+      <option value="viewsDesc">視聴回数 多い順</option>
+      <option value="viewsAsc">視聴回数 少ない順</option>
+    </select>
+
     <label>開始番号：</label>
     <input id="startNum" type="number" value="1" min="1">
     <span class="muted">件数：</span><span id="count" class="pill">0 件</span>
     <span id="status" class="muted"></span>
   </div>
+
   <p class="muted">各行は <strong>連番. タイトル(リンク) — 視聴回数(リンク) — 公開日</strong> で出力します（形式により最適化）。</p>
   <textarea id="out" placeholder="ここに結果が出ます"></textarea>
 
@@ -157,6 +167,7 @@ const sort2Select = document.getElementById('sort2');
 const runFormat   = document.getElementById('runFormat');
 
 const fmtSelect   = document.getElementById('format');
+const postSortSel = document.getElementById('postSort');  // ★ 追加
 const startNumInp = document.getElementById('startNum');
 
 const outTA       = document.getElementById('out');
@@ -166,6 +177,10 @@ const statusEl    = document.getElementById('status');
 const countEl     = document.getElementById('count');
 const previewWrap = document.getElementById('previewWrap');
 const previewDiv  = document.getElementById('preview');
+
+/* ==== 直近の結果をキャッシュ（整形後並び替えに使う） ==== */
+let lastRows = [];       // {url, viewCount, title, publishedAt, channelId, __idx}
+let lastChannel = null;  // {id,title,url,avatar,subscriberCount,viewCount,videoCount}
 
 /* ================== 保存/復元 ================== */
 apiKeyInput.value = localStorage.getItem('yt_api_key') || DEFAULT_API_KEY || '';
@@ -183,7 +198,8 @@ function getApiMode(){ return document.querySelector('input[name="mode"]:checked
 function getWorkMode(){ return document.querySelector('input[name="work"]:checked').value; }
 
 for (const r of document.querySelectorAll('input[name="mode"]')) r.addEventListener('change', syncVisibility);
-for (const r of document.querySelectorAll('input[name="work"]')) r.addEventListener('change', () => { syncVisibility(); outTA.value=''; setCount(0); renderPreview(''); });
+for (const r of document.querySelectorAll('input[name="work"]')) r.addEventListener('change', () => { syncVisibility(); clearOutput(); });
+
 function syncVisibility(){
   const apiMode  = getApiMode();
   const workMode = getWorkMode();
@@ -201,7 +217,6 @@ runCollect.onclick = async () => {
   const max  = Math.max(1, Math.min(5000, Number(limitInput.value) || 200));
   const since= sinceInput.value;
   const sort = sortSelect.value;
-  const startNo = Math.max(1, Number(startNumInp.value)||1);
   if (!raw) return alert('チャンネル/プレイリスト/URLを入力してください');
 
   try {
@@ -211,22 +226,22 @@ runCollect.onclick = async () => {
     if (apiMode === 'gas') {
       const app = validateExecUrlOrThrow(appUrlInput.value.trim());
       const payload = await runViaGAS(app, raw, { max, since, sort });
-      rows = payload.rows;
-      channel = payload.channel || null;
+      rows = payload.rows; channel = payload.channel || null;
     } else {
       const key = getKeyOrThrow();
       const { rows: rws, channel: ch } = await runViaClient(key, raw, { max, since, sort });
       rows = rws; channel = ch;
     }
-    const text = rowsToFormattedText(rows, fmtSelect.value, startNo, channel);
-    outTA.value = text;
-    setCount(rows.length);
+
+    // キャッシュして整形後並び替えに備える
+    lastRows = rows.map((r, i) => ({ ...r, __idx: i }));
+    lastChannel = channel;
+
+    rerenderFromCache();
     flash(`${rows.length}件を整形しました`);
-    renderPreview(text);
   } catch (e) {
     console.error(e);
-    setCount(0);
-    renderPreview('');
+    clearOutput();
     alert('エラー: ' + (e.message || e));
   } finally {
     setBusy(false);
@@ -238,39 +253,77 @@ runFormat.onclick = async () => {
   const text = rawUrlsTA.value;
   const ids  = extractVideoIds(text);
   if (!ids.length) return alert('動画URLが見つかりませんでした');
+
   const key   = getKeyOrThrow();
   const since = since2Input.value;
   const sort  = sort2Select.value;
-  const startNo = Math.max(1, Number(startNumInp.value)||1);
 
   try {
     setBusy(true); setCount('—');
     const details = await fetchVideosDetails(ids, key); // Map<id,{title,viewCount,publishedAt,channelId}>
-    let rows = ids.map(id => {
+    let rows = ids.map((id, i) => {
       const d = details.get(id) || {};
-      return { url:`https://www.youtube.com/watch?v=${id}`, viewCount:d.viewCount ?? null, title:d.title ?? '', publishedAt:d.publishedAt ?? '', channelId:d.channelId || '' };
+      return { url:`https://www.youtube.com/watch?v=${id}`, viewCount:d.viewCount ?? null, title:d.title ?? '', publishedAt:d.publishedAt ?? '', channelId:d.channelId || '', __idx:i };
     });
     rows = applySinceAndSort(rows, { since, sort });
 
-    // すべて同一チャンネルなら統計も表示
+    // チャンネル統計（全て同一チャンネルなら）
     let channel = null;
     const setCh = new Set(rows.map(r=>r.channelId).filter(Boolean));
     if (setCh.size === 1) channel = await fetchChannelInfo(Array.from(setCh)[0], key);
 
-    const out = rowsToFormattedText(rows, fmtSelect.value, startNo, channel);
-    outTA.value = out;
-    setCount(rows.length);
-    renderPreview(out);
+    lastRows = rows;
+    lastChannel = channel;
+
+    rerenderFromCache();
     flash(`${rows.length}件を整形しました`);
   } catch(e){
     console.error(e);
-    setCount(0);
-    renderPreview('');
+    clearOutput();
     alert('エラー: ' + (e.message || e));
   } finally {
     setBusy(false);
   }
 };
+
+/* ================== 整形後の並び替え＆再描画 ================== */
+postSortSel.addEventListener('change', rerenderFromCache);
+fmtSelect.addEventListener('change', rerenderFromCache);
+startNumInp.addEventListener('input', rerenderFromCache);
+
+function rerenderFromCache(){
+  const startNo = Math.max(1, Number(startNumInp.value)||1);
+  const postSort = postSortSel.value; // none | viewsDesc | viewsAsc
+
+  let rows = [...lastRows]; // コピー
+
+  // ★ 整形後並び替え（視聴回数 多い順/少ない順）
+  rows = applyPostSort(rows, postSort);
+
+  const text = rowsToFormattedText(rows, fmtSelect.value, startNo, lastChannel);
+  outTA.value = text;
+  setCount(rows.length);
+  renderPreview(text);
+}
+
+function applyPostSort(rows, postSort){
+  if (postSort === 'viewsDesc' || postSort === 'viewsAsc') {
+    // null/NaN は末尾に寄せる
+    const sign = (postSort === 'viewsDesc') ? -1 : 1;
+    rows.sort((a,b) => {
+      const av = (a.viewCount==null || isNaN(a.viewCount)) ? NaN : Number(a.viewCount);
+      const bv = (b.viewCount==null || isNaN(b.viewCount)) ? NaN : Number(b.viewCount);
+      if (isNaN(av) && isNaN(bv)) return a.__idx - b.__idx;
+      if (isNaN(av)) return 1;  // aを後ろへ
+      if (isNaN(bv)) return -1; // bを後ろへ
+      return sign * (av - bv);
+    });
+    return rows;
+  }
+  // 入力順に戻す
+  rows.sort((a,b)=> a.__idx - b.__idx);
+  return rows;
+}
 
 /* ================== プレビュー（HTMLのみ） ================== */
 function renderPreview(text){
@@ -279,6 +332,7 @@ function renderPreview(text){
 }
 
 /* ================== 共通ユーティリティ ================== */
+function clearOutput(){ outTA.value=''; setCount(0); renderPreview(''); }
 function setBusy(b, msg){ statusEl.textContent = b ? (msg || '処理中…') : ''; }
 function flash(msg){ statusEl.textContent = msg; setTimeout(()=> statusEl.textContent='', 1600); }
 function setCount(n){ countEl.textContent = (n==='—') ? '—' : `${Number(n)||0} 件`; }
@@ -296,10 +350,10 @@ async function runViaClient(key, raw, {max, since, sort}) {
   if (!uploads) throw new Error('アップロード済みプレイリストが見つかりませんでした');
 
   const videoIds = await listPlaylistVideoIds(uploads, key, max);
-  const details = await fetchVideosDetails(videoIds, key);
-  let rows = videoIds.map(id => {
+  const details  = await fetchVideosDetails(videoIds, key);
+  let rows = videoIds.map((id, i) => {
     const d = details.get(id) || {};
-    return { url:`https://www.youtube.com/watch?v=${id}`, viewCount:d.viewCount ?? null, title:d.title ?? '', publishedAt:d.publishedAt ?? '', channelId:d.channelId || '' };
+    return { url:`https://www.youtube.com/watch?v=${id}`, viewCount:d.viewCount ?? null, title:d.title ?? '', publishedAt:d.publishedAt ?? '', channelId:d.channelId || '', __idx:i };
   });
   rows = applySinceAndSort(rows, { since, sort });
   return { rows, channel };
@@ -323,12 +377,13 @@ async function runViaGAS(appUrl, channelInput, {max, since, sort}){
 }
 function normalizeFromBackend(json, sort, since){
   if (!json || json.ok === false) throw new Error(json?.error || 'GAS応答エラー');
-  let rows = (json.items || []).map(it => ({
+  let rows = (json.items || []).map((it,i) => ({
     url: it.url || '',
     viewCount: (it.viewCount != null) ? Number(it.viewCount) : null,
     title: it.title || '',
     publishedAt: it.publishedAt || '',
-    channelId: it.channelId || ''
+    channelId: it.channelId || '',
+    __idx: i
   }));
   rows = applySinceAndSort(rows, { since, sort });
   const channel = json.channel ? {
@@ -343,7 +398,7 @@ function normalizeFromBackend(json, sort, since){
   return { rows, channel };
 }
 
-/* ==== 並び替え・フィルタ ==== */
+/* ==== 取得時の並び替え・フィルタ（公開日ベース） ==== */
 function applySinceAndSort(rows, {since, sort}) {
   if (since) {
     const t0 = new Date(`${since}T00:00:00Z`).getTime();
@@ -494,176 +549,4 @@ function jsonpFetch(urlObj){
   return new Promise((resolve,reject)=>{
     const u = new URL(urlObj.toString());
     const cb = '__jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random()*1e6);
-    u.searchParams.set('callback', cb);
-    const timer = setTimeout(()=>{cleanup();reject(new Error('JSONPタイムアウト'));},15000);
-    function cleanup(){clearTimeout(timer);try{delete window[cb];}catch{} if (script&&script.parentNode) script.parentNode.removeChild(script);}
-    window[cb] = data => {cleanup();resolve(data);};
-    const script = document.createElement('script');
-    script.src = u.toString();
-    script.onerror = ()=>{cleanup();reject(new Error('JSONP読込失敗'));};
-    document.head.appendChild(script);
-  });
-}
-
-/* ==== YouTube API 呼び出し ==== */
-async function fetchChannelInfo(channelId, key){
-  const ep = new URL('https://www.googleapis.com/youtube/v3/channels');
-  ep.searchParams.set('part','snippet,statistics');
-  ep.searchParams.set('id', channelId);
-  ep.searchParams.set('key', key);
-  const r = await fetch(ep); await assertOk_(r, 'channels(stats) API');
-  const j = await r.json();
-  const it = j.items?.[0];
-  if (!it) return null;
-  const sn = it.snippet || {}, st = it.statistics || {};
-  return {
-    id: it.id,
-    title: sn.title || '',
-    url: `https://www.youtube.com/channel/${it.id}`,
-    avatar: sn.thumbnails?.default?.url || '',
-    subscriberCount: st.subscriberCount!=null ? Number(st.subscriberCount) : null,
-    viewCount:       st.viewCount!=null ? Number(st.viewCount) : null,
-    videoCount:      st.videoCount!=null ? Number(st.videoCount) : null
-  };
-}
-
-async function getChannelIdFromVideo(videoId, key) {
-  const ep = new URL('https://www.googleapis.com/youtube/v3/videos');
-  ep.searchParams.set('part','snippet');
-  ep.searchParams.set('id', videoId);
-  ep.searchParams.set('key', key);
-  const r = await fetch(ep); await assertOk_(r, 'videos API');
-  const j = await r.json();
-  return j.items?.[0]?.snippet?.channelId || null;
-}
-async function getChannelIdFromPlaylist(playlistId, key) {
-  const ep = new URL('https://www.googleapis.com/youtube/v3/playlists');
-  ep.searchParams.set('part','snippet');
-  ep.searchParams.set('id', playlistId);
-  ep.searchParams.set('key', key);
-  const r = await fetch(ep); await assertOk_(r, 'playlists API');
-  const j = await r.json();
-  return j.items?.[0]?.snippet?.channelId || null;
-}
-async function searchChannelIdByHandle(handle, key) {
-  const ep = new URL('https://www.googleapis.com/youtube/v3/search');
-  ep.searchParams.set('part','snippet');
-  ep.searchParams.set('type','channel');
-  ep.searchParams.set('q', handle);
-  ep.searchParams.set('maxResults','1');
-  ep.searchParams.set('key', key);
-  const r = await fetch(ep); await assertOk_(r, 'search(handle) API');
-  const j = await r.json();
-  return j.items?.[0]?.id?.channelId || null;
-}
-async function searchChannelIdByQuery(query, key) {
-  const ep = new URL('https://www.googleapis.com/youtube/v3/search');
-  ep.searchParams.set('part','snippet');
-  ep.searchParams.set('type','channel');
-  ep.searchParams.set('q', query);
-  ep.searchParams.set('maxResults','1');
-  ep.searchParams.set('key', key);
-  const r = await fetch(ep); await assertOk_(r, 'search(query) API');
-  const j = await r.json();
-  return j.items?.[0]?.id?.channelId || null;
-}
-async function getUploadsPlaylistId(channelId, key) {
-  const ep = new URL('https://www.googleapis.com/youtube/v3/channels');
-  ep.searchParams.set('part', 'contentDetails');
-  ep.searchParams.set('id', channelId);
-  ep.searchParams.set('key', key);
-  const r = await fetch(ep); await assertOk_(r, 'channels API');
-  const j = await r.json();
-  return j.items?.[0]?.contentDetails?.relatedPlaylists?.uploads || null;
-}
-async function listPlaylistVideoIds(playlistId, key, maxCount) {
-  let ids = []; let pageToken = '';
-  while (ids.length < maxCount) {
-    const ep = new URL('https://www.googleapis.com/youtube/v3/playlistItems');
-    ep.searchParams.set('part', 'contentDetails');
-    ep.searchParams.set('playlistId', playlistId);
-    ep.searchParams.set('maxResults', '50');
-    if (pageToken) ep.searchParams.set('pageToken', pageToken);
-    ep.searchParams.set('key', key);
-    const r = await fetch(ep); await assertOk_(r, 'playlistItems API');
-    const j = await r.json();
-    for (const it of (j.items || [])) {
-      const id = it.contentDetails?.videoId;
-      if (id) ids.push(id);
-      if (ids.length >= maxCount) break;
-    }
-    pageToken = j.nextPageToken || '';
-    if (!pageToken) break;
-    setBusy(true, `取得中… ${ids.length}件`);
-  }
-  return ids;
-}
-async function fetchVideosDetails(videoIds, key) {
-  const map = new Map();
-  for (let i = 0; i < videoIds.length; i += 50) {
-    const chunk = videoIds.slice(i, i + 50);
-    const ep = new URL('https://www.googleapis.com/youtube/v3/videos');
-    ep.searchParams.set('part', 'snippet,statistics');
-    ep.searchParams.set('id', chunk.join(','));
-    ep.searchParams.set('key', key);
-    const r = await fetch(ep); await assertOk_(r, 'videos(details) API');
-    const j = await r.json();
-    for (const it of (j.items || [])) {
-      map.set(it.id, {
-        title: it.snippet?.title ?? '',
-        viewCount: it.statistics?.viewCount != null ? Number(it.statistics.viewCount) : null,
-        publishedAt: it.snippet?.publishedAt ?? '',
-        channelId: it.snippet?.channelId || ''
-      });
-    }
-  }
-  return map;
-}
-/* ==== チャンネルID解決 ==== */
-function looksLikeUrl(s){ return /^https?:\/\//i.test(String(s||'')); }
-async function resolveChannelIdSmart(input, key) {
-  const raw = String(input||'').trim(); if (!raw) return null;
-  if (/^UC[0-9A-Za-z_-]{22}$/.test(raw)) return raw;
-  if (/^[0-9A-Za-z_-]{11}$/.test(raw)) { const cid = await getChannelIdFromVideo(raw, key); if (cid) return cid; }
-  if (raw.startsWith('@')) { const cid = await searchChannelIdByHandle(raw.slice(1), key); if (cid) return cid; }
-  if (looksLikeUrl(raw)) {
-    try {
-      const u = new URL(raw);
-      const host = u.hostname.replace(/^www\./,'');
-      const parts = u.pathname.replace(/\/+$/,'').split('/').filter(Boolean);
-      const vid = u.searchParams.get('v') || (['shorts','embed','live'].includes(parts[0]) ? parts[1] : null);
-      if (host==='youtu.be' && parts[0]) { const cid = await getChannelIdFromVideo(parts[0].slice(0,11), key); if (cid) return cid; }
-      if (vid) { const cid = await getChannelIdFromVideo(vid.slice(0,11), key); if (cid) return cid; }
-      const list = u.searchParams.get('list'); if (list) { const cid = await getChannelIdFromPlaylist(list, key); if (cid) return cid; }
-      const mCh = u.pathname.match(/\/channel\/(UC[0-9A-Za-z_-]{22})$/); if (mCh) return mCh[1];
-      const mHandle = u.pathname.match(/\/@([^/]+)$/); if (mHandle) { const cid = await searchChannelIdByHandle(mHandle[1], key); if (cid) return cid; }
-      const mCustom = u.pathname.match(/\/(c|user)\/([^/]+)$/); if (mCustom) { const cid = await searchChannelIdByQuery(mCustom[2], key); if (cid) return cid; }
-    } catch {}
-  }
-  return await searchChannelIdByQuery(raw, key);
-}
-
-/* ==== ヘルパ ==== */
-async function assertOk_(res, label){
-  if (res.ok) return;
-  let detail=''; try{ detail=' / '+(await res.text()).slice(0,200);}catch{}
-  throw new Error(`${label} エラー: ${res.status}${detail}`);
-}
-function validateExecUrlOrThrow(s){
-  const m = String(s||'').match(/https?:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec/);
-  if (!m) throw new Error('GASの APP_URL（/exec）を正しく入力してください');
-  return m[0];
-}
-
-/* ==== 便利ボタン ==== */
-copyBtn.onclick = async () => {
-  try { await navigator.clipboard.writeText(outTA.value); flash('コピーしました'); }
-  catch { alert('コピーに失敗しました'); }
-};
-dlCsvBtn.onclick = () => {
-  const text = outTA.value || '';
-  const blob = new Blob([new Uint8Array([0xEF,0xBB,0xBF]), text.replace(/\t/g, ',')], { type: 'text/csv' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-  a.download = `youtube_${Date.now()}.csv`; document.body.appendChild(a); a.click(); a.remove();
-};
-</script>
+    u.searchParams.set('callback', cb
