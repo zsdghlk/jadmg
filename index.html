@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>YouTube 一括取得・整形（連番＋リンク＋チャンネル統計）</title>
+<title>YouTube 一括取得・整形（統計＋並び替えフル）</title>
 <style>
   :root{--muted:#6b7280;--bd:#e5e7eb}
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans JP",sans-serif;margin:24px;line-height:1.7}
@@ -19,11 +19,11 @@
   .preview{border:1px dashed var(--bd);border-radius:10px;padding:12px;margin-top:8px}
 </style>
 
-<h1>YouTube 一括取得・整形（連番＋リンク＋チャンネル統計）</h1>
+<h1>YouTube 一括取得・整形（統計＋並び替えフル）</h1>
 
 <script>
-// 公開環境では空が安全。ローカル用途のみ埋めてもOK
-const DEFAULT_API_KEY = 'AIzaSyAsoGsbekSs5kfzjfIdxmuOdo44hwDqq3g';
+// 公開環境では空が安全（ローカル用途のみ値を入れてOK）
+const DEFAULT_API_KEY = '';
 </script>
 
 <!-- 動作モード -->
@@ -73,10 +73,10 @@ const DEFAULT_API_KEY = 'AIzaSyAsoGsbekSs5kfzjfIdxmuOdo44hwDqq3g';
     <input id="limit" type="number" value="200" min="1" max="5000">
     <label>公開日 since：</label>
     <input id="since" type="date">
-    <label>並び順：</label>
+    <label>取得時の並び：</label>
     <select id="sort">
-      <option value="newest" selected>新しい順</option>
-      <option value="oldest">古い順</option>
+      <option value="newest" selected>新しい順（公開日）</option>
+      <option value="oldest">古い順（公開日）</option>
       <option value="none">そのまま</option>
     </select>
   </div>
@@ -92,11 +92,11 @@ const DEFAULT_API_KEY = 'AIzaSyAsoGsbekSs5kfzjfIdxmuOdo44hwDqq3g';
   <div class="row">
     <label>公開日 since：</label>
     <input id="since2" type="date">
-    <label>並び順：</label>
+    <label>取得時の並び：</label>
     <select id="sort2">
       <option value="none" selected>入力順のまま</option>
-      <option value="newest">新しい順</option>
-      <option value="oldest">古い順</option>
+      <option value="newest">新しい順（公開日）</option>
+      <option value="oldest">古い順（公開日）</option>
     </select>
   </div>
   <div class="row">
@@ -115,12 +115,34 @@ const DEFAULT_API_KEY = 'AIzaSyAsoGsbekSs5kfzjfIdxmuOdo44hwDqq3g';
       <option value="tsv">TSV（表形式）</option>
       <option value="csv">CSV（表形式）</option>
     </select>
+
+    <!-- ★ 整形後並び替え（視聴回数等） -->
+    <label>整形後の並び替え：</label>
+    <select id="postSort">
+      <option value="none" selected>入力順のまま</option>
+      <option value="viewsDesc">視聴回数 多い順</option>
+      <option value="viewsAsc">視聴回数 少ない順</option>
+      <option value="likesDesc">高評価 多い順</option>
+      <option value="likesAsc">高評価 少ない順</option>
+      <option value="commentsDesc">コメント 多い順</option>
+      <option value="commentsAsc">コメント 少ない順</option>
+      <option value="avgDesc">平均/日 多い順</option>
+      <option value="avgAsc">平均/日 少ない順</option>
+      <option value="growthDesc">推定増分(N日) 多い順</option>
+      <option value="growthAsc">推定増分(N日) 少ない順</option>
+    </select>
+
+    <label>推定N日：</label>
+    <input id="windowDays" type="number" value="28" min="1" style="width:90px">
+
     <label>開始番号：</label>
     <input id="startNum" type="number" value="1" min="1">
+
     <span class="muted">件数：</span><span id="count" class="pill">0 件</span>
     <span id="status" class="muted"></span>
   </div>
-  <p class="muted">各行は <strong>連番. タイトル(リンク) — 視聴回数(リンク) — 公開日</strong> で出力します（形式により最適化）。</p>
+
+  <p class="muted">各行は <strong>連番. タイトル(リンク) — 視聴回数(リンク) — 高評価 — コメント — 平均/日 — 推定増分(N日) — 公開日</strong> で出力（形式により最適化）。</p>
   <textarea id="out" placeholder="ここに結果が出ます"></textarea>
 
   <div class="row">
@@ -157,6 +179,8 @@ const sort2Select = document.getElementById('sort2');
 const runFormat   = document.getElementById('runFormat');
 
 const fmtSelect   = document.getElementById('format');
+const postSortSel = document.getElementById('postSort');
+const windowDays  = document.getElementById('windowDays');
 const startNumInp = document.getElementById('startNum');
 
 const outTA       = document.getElementById('out');
@@ -166,6 +190,10 @@ const statusEl    = document.getElementById('status');
 const countEl     = document.getElementById('count');
 const previewWrap = document.getElementById('previewWrap');
 const previewDiv  = document.getElementById('preview');
+
+/* ==== 直近の結果をキャッシュ（整形後並び替えに使う） ==== */
+let lastRows = [];       // {url, viewCount, likeCount, commentCount, title, publishedAt, channelId, __idx}
+let lastChannel = null;  // {id,title,url,avatar,subscriberCount,viewCount,videoCount}
 
 /* ================== 保存/復元 ================== */
 apiKeyInput.value = localStorage.getItem('yt_api_key') || DEFAULT_API_KEY || '';
@@ -183,7 +211,8 @@ function getApiMode(){ return document.querySelector('input[name="mode"]:checked
 function getWorkMode(){ return document.querySelector('input[name="work"]:checked').value; }
 
 for (const r of document.querySelectorAll('input[name="mode"]')) r.addEventListener('change', syncVisibility);
-for (const r of document.querySelectorAll('input[name="work"]')) r.addEventListener('change', () => { syncVisibility(); outTA.value=''; setCount(0); renderPreview(''); });
+for (const r of document.querySelectorAll('input[name="work"]')) r.addEventListener('change', () => { syncVisibility(); clearOutput(); });
+
 function syncVisibility(){
   const apiMode  = getApiMode();
   const workMode = getWorkMode();
@@ -201,7 +230,6 @@ runCollect.onclick = async () => {
   const max  = Math.max(1, Math.min(5000, Number(limitInput.value) || 200));
   const since= sinceInput.value;
   const sort = sortSelect.value;
-  const startNo = Math.max(1, Number(startNumInp.value)||1);
   if (!raw) return alert('チャンネル/プレイリスト/URLを入力してください');
 
   try {
@@ -211,22 +239,21 @@ runCollect.onclick = async () => {
     if (apiMode === 'gas') {
       const app = validateExecUrlOrThrow(appUrlInput.value.trim());
       const payload = await runViaGAS(app, raw, { max, since, sort });
-      rows = payload.rows;
-      channel = payload.channel || null;
+      rows = payload.rows; channel = payload.channel || null;
     } else {
       const key = getKeyOrThrow();
       const { rows: rws, channel: ch } = await runViaClient(key, raw, { max, since, sort });
       rows = rws; channel = ch;
     }
-    const text = rowsToFormattedText(rows, fmtSelect.value, startNo, channel);
-    outTA.value = text;
-    setCount(rows.length);
+
+    lastRows = rows.map((r, i) => ({ ...r, __idx: i }));
+    lastChannel = channel;
+
+    rerenderFromCache();
     flash(`${rows.length}件を整形しました`);
-    renderPreview(text);
   } catch (e) {
     console.error(e);
-    setCount(0);
-    renderPreview('');
+    clearOutput();
     alert('エラー: ' + (e.message || e));
   } finally {
     setBusy(false);
@@ -238,39 +265,109 @@ runFormat.onclick = async () => {
   const text = rawUrlsTA.value;
   const ids  = extractVideoIds(text);
   if (!ids.length) return alert('動画URLが見つかりませんでした');
+
   const key   = getKeyOrThrow();
   const since = since2Input.value;
   const sort  = sort2Select.value;
-  const startNo = Math.max(1, Number(startNumInp.value)||1);
 
   try {
     setBusy(true); setCount('—');
-    const details = await fetchVideosDetails(ids, key); // Map<id,{title,viewCount,publishedAt,channelId}>
-    let rows = ids.map(id => {
+    const details = await fetchVideosDetails(ids, key); // Map<id,{title,viewCount,likeCount,commentCount,publishedAt,channelId}>
+    let rows = ids.map((id, i) => {
       const d = details.get(id) || {};
-      return { url:`https://www.youtube.com/watch?v=${id}`, viewCount:d.viewCount ?? null, title:d.title ?? '', publishedAt:d.publishedAt ?? '', channelId:d.channelId || '' };
+      return {
+        url:`https://www.youtube.com/watch?v=${id}`,
+        viewCount:d.viewCount ?? null,
+        likeCount:d.likeCount ?? null,
+        commentCount:d.commentCount ?? null,
+        title:d.title ?? '',
+        publishedAt:d.publishedAt ?? '',
+        channelId:d.channelId || '',
+        __idx:i
+      };
     });
     rows = applySinceAndSort(rows, { since, sort });
 
-    // すべて同一チャンネルなら統計も表示
+    // 同一チャンネルのみ統計表示
     let channel = null;
     const setCh = new Set(rows.map(r=>r.channelId).filter(Boolean));
     if (setCh.size === 1) channel = await fetchChannelInfo(Array.from(setCh)[0], key);
 
-    const out = rowsToFormattedText(rows, fmtSelect.value, startNo, channel);
-    outTA.value = out;
-    setCount(rows.length);
-    renderPreview(out);
+    lastRows = rows;
+    lastChannel = channel;
+
+    rerenderFromCache();
     flash(`${rows.length}件を整形しました`);
   } catch(e){
     console.error(e);
-    setCount(0);
-    renderPreview('');
+    clearOutput();
     alert('エラー: ' + (e.message || e));
   } finally {
     setBusy(false);
   }
 };
+
+/* ================== 整形後の並び替え＆再描画 ================== */
+postSortSel.addEventListener('change', rerenderFromCache);
+fmtSelect.addEventListener('change', rerenderFromCache);
+startNumInp.addEventListener('input', rerenderFromCache);
+windowDays.addEventListener('input', rerenderFromCache);
+
+function rerenderFromCache(){
+  const startNo = Math.max(1, Number(startNumInp.value)||1);
+  const postSort = postSortSel.value;
+  const win = Math.max(1, Number(windowDays.value)||28);
+
+  // 由来不変の並びを守れるよう __idx を保持しつつコピー
+  let rows = lastRows.map(r => ({ ...r }));
+
+  // 推派生指標を計算
+  rows = computeDerivedMetrics(rows, win);
+
+  // 整形後並び替え
+  rows = applyPostSort(rows, postSort);
+
+  const text = rowsToFormattedText(rows, fmtSelect.value, startNo, lastChannel, win);
+  outTA.value = text;
+  setCount(rows.length);
+  renderPreview(text);
+}
+
+function computeDerivedMetrics(rows, winDays){
+  const now = Date.now();
+  return rows.map(r=>{
+    const t = new Date(r.publishedAt || 0).getTime();
+    const age = isFinite(t) ? Math.max((now - t) / 86400000, 1/24) : NaN; // 日（最小1時間相当）
+    const views = (r.viewCount==null || isNaN(r.viewCount)) ? NaN : Number(r.viewCount);
+    const avgPerDay = isNaN(views) || isNaN(age) ? NaN : (views/age);
+    const growth = isNaN(avgPerDay) ? NaN : (avgPerDay * Math.min(winDays, Math.max(age,0)));
+    return { ...r, __ageDays: age, __avgPerDay: avgPerDay, __growthWin: growth };
+  });
+}
+
+function applyPostSort(rows, postSort){
+  const byNum = (field, asc=true) => (a,b)=>{
+    const av = Number(a[field]); const bv = Number(b[field]);
+    const aNaN = isNaN(av); const bNaN = isNaN(bv);
+    if (aNaN && bNaN) return a.__idx - b.__idx;
+    if (aNaN) return 1;
+    if (bNaN) return -1;
+    return asc ? (av - bv) : (bv - av);
+  };
+  switch(postSort){
+    case 'viewsDesc': return rows.sort(byNum('viewCount', false));
+    case 'viewsAsc' : return rows.sort(byNum('viewCount', true));
+    case 'likesDesc': return rows.sort(byNum('likeCount', false));
+    case 'likesAsc' : return rows.sort(byNum('likeCount', true));
+    case 'commentsDesc': return rows.sort(byNum('commentCount', false));
+    case 'commentsAsc' : return rows.sort(byNum('commentCount', true));
+    case 'avgDesc': return rows.sort(byNum('__avgPerDay', false));
+    case 'avgAsc' : return rows.sort(byNum('__avgPerDay', true));
+    case 'growthDesc': return rows.sort(byNum('__growthWin', false));
+    case 'growthAsc' : return rows.sort(byNum('__growthWin', true));
+    default: return rows.sort((a,b)=> a.__idx - b.__idx); // 入力順
+  }
+}
 
 /* ================== プレビュー（HTMLのみ） ================== */
 function renderPreview(text){
@@ -279,6 +376,7 @@ function renderPreview(text){
 }
 
 /* ================== 共通ユーティリティ ================== */
+function clearOutput(){ outTA.value=''; setCount(0); renderPreview(''); }
 function setBusy(b, msg){ statusEl.textContent = b ? (msg || '処理中…') : ''; }
 function flash(msg){ statusEl.textContent = msg; setTimeout(()=> statusEl.textContent='', 1600); }
 function setCount(n){ countEl.textContent = (n==='—') ? '—' : `${Number(n)||0} 件`; }
@@ -296,10 +394,19 @@ async function runViaClient(key, raw, {max, since, sort}) {
   if (!uploads) throw new Error('アップロード済みプレイリストが見つかりませんでした');
 
   const videoIds = await listPlaylistVideoIds(uploads, key, max);
-  const details = await fetchVideosDetails(videoIds, key);
-  let rows = videoIds.map(id => {
+  const details  = await fetchVideosDetails(videoIds, key);
+  let rows = videoIds.map((id, i) => {
     const d = details.get(id) || {};
-    return { url:`https://www.youtube.com/watch?v=${id}`, viewCount:d.viewCount ?? null, title:d.title ?? '', publishedAt:d.publishedAt ?? '', channelId:d.channelId || '' };
+    return {
+      url:`https://www.youtube.com/watch?v=${id}`,
+      viewCount:d.viewCount ?? null,
+      likeCount:d.likeCount ?? null,
+      commentCount:d.commentCount ?? null,
+      title:d.title ?? '',
+      publishedAt:d.publishedAt ?? '',
+      channelId:d.channelId || '',
+      __idx:i
+    };
   });
   rows = applySinceAndSort(rows, { since, sort });
   return { rows, channel };
@@ -323,12 +430,15 @@ async function runViaGAS(appUrl, channelInput, {max, since, sort}){
 }
 function normalizeFromBackend(json, sort, since){
   if (!json || json.ok === false) throw new Error(json?.error || 'GAS応答エラー');
-  let rows = (json.items || []).map(it => ({
+  let rows = (json.items || []).map((it,i) => ({
     url: it.url || '',
     viewCount: (it.viewCount != null) ? Number(it.viewCount) : null,
+    likeCount: (it.likeCount != null) ? Number(it.likeCount) : null,
+    commentCount: (it.commentCount != null) ? Number(it.commentCount) : null,
     title: it.title || '',
     publishedAt: it.publishedAt || '',
-    channelId: it.channelId || ''
+    channelId: it.channelId || '',
+    __idx: i
   }));
   rows = applySinceAndSort(rows, { since, sort });
   const channel = json.channel ? {
@@ -343,7 +453,7 @@ function normalizeFromBackend(json, sort, since){
   return { rows, channel };
 }
 
-/* ==== 並び替え・フィルタ ==== */
+/* ==== 取得時の並び替え・フィルタ（公開日ベース） ==== */
 function applySinceAndSort(rows, {since, sort}) {
   if (since) {
     const t0 = new Date(`${since}T00:00:00Z`).getTime();
@@ -363,54 +473,68 @@ function applySinceAndSort(rows, {since, sort}) {
 }
 
 /* ==== 整形（テンプレ：上にチャンネル統計） ==== */
-function rowsToFormattedText(rows, fmt, startNo, channel){
+function rowsToFormattedText(rows, fmt, startNo, channel, winDays){
   const num = (i)=> String(Math.max(1, startNo|0) + i);
   const fmtNum = (n, unit='') => (n==null || isNaN(n)) ? '' : Number(n).toLocaleString('ja-JP')+unit;
+  const fmtFloat = (n)=> (n==null || isNaN(n)) ? '' : (Math.round(n*10)/10).toLocaleString('ja-JP');
   const ch = channel || null;
 
-  if (fmt === 'html-list' || fmt === 'html-cards') {
-    const header = ch ? (() => {
-      const sub = fmtNum(ch.subscriberCount, '人');
-      const views = fmtNum(ch.viewCount, '回');
-      const vids = fmtNum(ch.videoCount, '本');
-      const name = escapeHtml(ch.title||'');
-      const url  = ch.url || (ch.id ? `https://www.youtube.com/channel/${ch.id}`:'');
-      const img  = ch.avatar ? `<img src="${ch.avatar}" alt="" style="width:48px;height:48px;border-radius:999px;vertical-align:middle;margin-right:8px">` : '';
-      return `<section style="margin:0 0 10px;padding:10px;border:1px solid #eee;border-radius:8px">
-        <div style="display:flex;align-items:center;gap:8px">
-          ${img}
-          <div>
-            <div style="font-weight:700;font-size:1.1rem"><a href="${url}" target="_blank" rel="noopener">${name}</a></div>
-            <div style="color:#666;font-size:.9rem">登録者数：${sub || '-'}　総再生回数：${views || '-'}　動画数：${vids || '-'}</div>
-          </div>
+  const headHtml = ch ? (() => {
+    const sub = fmtNum(ch.subscriberCount, '人');
+    const views = fmtNum(ch.viewCount, '回');
+    const vids = fmtNum(ch.videoCount, '本');
+    const name = escapeHtml(ch.title||'');
+    const url  = ch.url || (ch.id ? `https://www.youtube.com/channel/${ch.id}`:'');
+    const img  = ch.avatar ? `<img src="${ch.avatar}" alt="" style="width:48px;height:48px;border-radius:999px;vertical-align:middle;margin-right:8px">` : '';
+    return `<section style="margin:0 10px 12px 0;padding:10px;border:1px solid #eee;border-radius:8px">
+      <div style="display:flex;align-items:center;gap:8px">
+        ${img}
+        <div>
+          <div style="font-weight:700;font-size:1.1rem"><a href="${url}" target="_blank" rel="noopener">${name}</a></div>
+          <div style="color:#666;font-size:.9rem">登録者数：${sub || '-'}　総再生回数：${views || '-'}　動画数：${vids || '-'}</div>
         </div>
-      </section>`;
-    })() : '';
+      </div>
+    </section>`;
+  })() : '';
 
+  const viewLine = (r) => {
+    const views = (r.viewCount!=null)? Number(r.viewCount).toLocaleString('ja-JP')+'回' : '-';
+    const likes = (r.likeCount!=null)? Number(r.likeCount).toLocaleString('ja-JP') : '-';
+    const comms = (r.commentCount!=null)? Number(r.commentCount).toLocaleString('ja-JP') : '-';
+    const avg   = isNaN(r.__avgPerDay) ? '-' : `${fmtFloat(r.__avgPerDay)}/日`;
+    const grow  = isNaN(r.__growthWin) ? '-' : `${Math.round(r.__growthWin).toLocaleString('ja-JP')}回/推定${winDays}日`;
+    const date  = r.publishedAt ? r.publishedAt.slice(0,10) : '';
+    return { views, likes, comms, avg, grow, date };
+  };
+
+  if (fmt === 'html-list' || fmt === 'html-cards') {
     if (fmt === 'html-list') {
       const items = rows.map((r,i)=>{
-        const views = (r.viewCount!=null)? Number(r.viewCount).toLocaleString('ja-JP')+'回' : '';
-        const date  = r.publishedAt ? r.publishedAt.slice(0,10) : '';
+        const v = viewLine(r);
         return `<li style="margin:6px 0">
           <a href="${r.url}" target="_blank" rel="noopener" style="font-weight:600">${escapeHtml(r.title)}</a>
-          — <a href="${r.url}" target="_blank" rel="noopener">${views}</a>
-          — <span style="color:#666">${escapeHtml(date)}</span>
+          — <a href="${r.url}" target="_blank" rel="noopener">${v.views}</a>
+          — 👍 ${v.likes} — 💬 ${v.comms} — ${v.avg} — ${v.grow}
+          — <span style="color:#666">${escapeHtml(v.date)}</span>
         </li>`;
       }).join('');
-      return `${header}<ol start="${Math.max(1, startNo|0)}" style="padding-left:1.4em">${items}</ol>`;
+      return `${headHtml}<ol start="${Math.max(1, startNo|0)}" style="padding-left:1.4em">${items}</ol>`;
     } else {
       // html-cards
       const cards = rows.map((r,i)=>{
         const no = num(i);
-        const views = (r.viewCount!=null)? Number(r.viewCount).toLocaleString('ja-JP')+'回' : '';
-        const date  = r.publishedAt ? r.publishedAt.slice(0,10) : '';
+        const v = viewLine(r);
         return `<div style="border:1px solid #eee;border-radius:10px;padding:10px">
           <div style="font-size:.9rem;color:#666">#${no}</div>
           <div style="font-weight:700;margin:2px 0 6px"><a href="${r.url}" target="_blank" rel="noopener">${escapeHtml(r.title)}</a></div>
-          <div style="color:#444"><a href="${r.url}" target="_blank" rel="noopener">${views || '-'}</a>　|　<span style="color:#666">${escapeHtml(date)}</span></div>
+          <div style="color:#444">
+            <a href="${r.url}" target="_blank" rel="noopener">${v.views}</a>　|　👍 ${v.likes}　|　💬 ${v.comms}
+          </div>
+          <div style="color:#444">平均/日：${v.avg}　|　推定増分：${v.grow}</div>
+          <div style="color:#666">${escapeHtml(v.date)}</div>
         </div>`;
       }).join('');
-      return `${header}<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">${cards}</div>`;
+      return `${headHtml}<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px">${cards}</div>`;
     }
   }
 
@@ -419,9 +543,8 @@ function rowsToFormattedText(rows, fmt, startNo, channel){
 登録者数：${fmtNum(ch.subscriberCount)}　総再生回数：${fmtNum(ch.viewCount)}　動画数：${fmtNum(ch.videoCount)}
 ` : '';
     const lines = rows.map((r,i)=>{
-      const views = (r.viewCount!=null)? Number(r.viewCount).toLocaleString('ja-JP')+'回' : '';
-      const date  = r.publishedAt ? r.publishedAt.slice(0,10) : '';
-      return `${num(i)}. [${r.title}](${r.url}) — [${views}](${r.url}) — ${date}`;
+      const v = viewLine(r);
+      return `${num(i)}. [${r.title}](${r.url}) — [${v.views}](${r.url}) — 👍 ${v.likes} — 💬 ${v.comms} — 平均/日 ${v.avg} — 推定増分 ${v.grow} — ${v.date}`;
     }).join('\n');
     return header + lines;
   }
@@ -433,7 +556,7 @@ function rowsToFormattedText(rows, fmt, startNo, channel){
     if (fmt==='csv' && /[",\n]/.test(s)) s = `"${s.replace(/"/g,'""')}"`;
     return s;
   };
-  const head = ['No','URL','視聴回数','タイトル','公開日'];
+  const head = ['No','URL','視聴回数','高評価','コメント','平均/日','推定増分(N日)','公開日','タイトル'];
   const channelRows = ch ? [
     ['Channel Title', ch.title || ''],
     ['Channel URL', ch.url || (ch.id?`https://www.youtube.com/channel/${ch.id}`:'')],
@@ -446,9 +569,8 @@ function rowsToFormattedText(rows, fmt, startNo, channel){
 
   const lines = channelRows.map(r=>r.map(esc).join(sep));
   rows.forEach((r,i)=>{
-    const views = (r.viewCount!=null)? Number(r.viewCount).toLocaleString('ja-JP') : '';
-    const date  = r.publishedAt ? r.publishedAt.slice(0,10) : '';
-    lines.push([num(i), r.url, views, r.title, date].map(esc).join(sep));
+    const v = viewLine(r);
+    lines.push([num(i), r.url, v.views.replace('回',''), v.likes, v.comms, v.avg.replace('/日',''), v.grow.replace('回/推定'+winDays+'日',''), v.date, r.title].map(esc).join(sep));
   });
   return lines.join('\n');
 }
@@ -612,6 +734,8 @@ async function fetchVideosDetails(videoIds, key) {
       map.set(it.id, {
         title: it.snippet?.title ?? '',
         viewCount: it.statistics?.viewCount != null ? Number(it.statistics.viewCount) : null,
+        likeCount: it.statistics?.likeCount != null ? Number(it.statistics.likeCount) : null,
+        commentCount: it.statistics?.commentCount != null ? Number(it.statistics.commentCount) : null,
         publishedAt: it.snippet?.publishedAt ?? '',
         channelId: it.snippet?.channelId || ''
       });
@@ -619,6 +743,7 @@ async function fetchVideosDetails(videoIds, key) {
   }
   return map;
 }
+
 /* ==== チャンネルID解決 ==== */
 function looksLikeUrl(s){ return /^https?:\/\//i.test(String(s||'')); }
 async function resolveChannelIdSmart(input, key) {
