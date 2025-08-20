@@ -319,3 +319,169 @@ function detectInputType(raw){
       const parts = u.pathname.replace(/\/+$/,'').split('/').filter(Boolean);
       const vid = u.searchParams.get('v') || (['shorts','embed','live'].includes(parts[0]) ? parts[1] : null);
       const list = u.searchParams.get('list');
+      if (host==='youtu.be' && parts[0]) return { kind:'video', videoId: parts[0].slice(0,11) };
+      if (vid) return { kind:'video', videoId: vid.slice(0,11) };
+      if (list) return { kind:'playlist', playlistId: list };
+      const mCh = u.pathname.match(/\/channel\/(UC[0-9A-Za-z_-]{22})$/);
+      if (mCh) return { kind:'channel', channelId:mCh[1] };
+      const mHandle = u.pathname.match(/\/@([^/]+)$/);
+      if (mHandle) return { kind:'channelQuery', q:mHandle[1] };
+      const mCustom = u.pathname.match(/\/(c|user)\/([^/]+)$/);
+      if (mCustom) return { kind:'channelQuery', q:mCustom[2] };
+    }catch{}
+  }
+  if (/^[0-9A-Za-z_-]{11}$/.test(s)) return { kind:'video', videoId:s };
+  return { kind:'channelQuery', q:s };
+}
+
+/* ========= プロキシAPI呼び出し ========= */
+async function fetchChannelInfo_Proxy(channelId){
+  const r = await jsonp('channelInfo', { id: channelId });
+  return r?.data || null;
+}
+async function getChannelIdFromVideo_Proxy(videoId){
+  const r = await jsonp('channelFromVideo', { id: videoId });
+  return r?.channelId || null;
+}
+async function getUploadsPlaylistId_Proxy(channelId){
+  const r = await jsonp('uploads', { id: channelId });
+  return r?.data || null; // { uploads: 'UU...' }
+}
+async function listPlaylistVideoIds_Proxy(playlistId, maxCount){
+  let ids = [], pageToken = '';
+  while (ids.length < Math.min(maxCount, MAX_FETCH)){
+    const r = await jsonp('playlistItems', { playlistId, pageToken });
+    const chunk = (r?.items||[]).map(it=> it?.contentDetails?.videoId).filter(Boolean);
+    ids.push(...chunk);
+    pageToken = r?.nextPageToken || '';
+    if (!pageToken) break;
+    busy(true, `取得中… ${ids.length}件`);
+  }
+  return ids.slice(0, Math.min(maxCount, MAX_FETCH));
+}
+async function fetchVideosDetails_Proxy(videoIds){
+  const map = new Map();
+  for (let i=0;i<videoIds.length;i+=50){
+    const chunk = videoIds.slice(i,i+50).join(',');
+    const r = await jsonp('videos', { ids: chunk });
+    for (const it of (r?.items||[])){
+      map.set(it.id, {
+        title: it.snippet?.title ?? '',
+        viewCount: it.statistics?.viewCount!=null? Number(it.statistics.viewCount):null,
+        likeCount: it.statistics?.likeCount!=null? Number(it.statistics?.likeCount):null,
+        commentCount: it.statistics?.commentCount!=null? Number(it.statistics?.commentCount):null,
+        publishedAt: it.snippet?.publishedAt ?? ''
+      });
+    }
+  }
+  return map;
+}
+async function searchChannelIdByQuery_Proxy(query){
+  const r = await jsonp('searchChannel', { q: query });
+  return r?.channelId || null;
+}
+
+/* ========= 並び替えロジック（流用） ========= */
+function sortAfter(rows, key){
+  const byNum = (field, asc=true)=>(a,b)=>{
+    const av=Number(a[field]), bv=Number(b[field]);
+    const aNaN=isNaN(av), bNaN=isNaN(bv);
+    if (aNaN && bNaN) return a.__idx-b.__idx;
+    if (aNaN) return 1; if (bNaN) return -1;
+    return asc? (av-bv):(bv-av);
+  };
+  switch(key){
+    case 'viewsDesc': return rows.sort(byNum('viewCount', false));
+    case 'viewsAsc' : return rows.sort(byNum('viewCount', true ));
+    case 'likesDesc': return rows.sort(byNum('likeCount', false));
+    case 'likesAsc' : return rows.sort(byNum('likeCount', true ));
+    case 'commentsDesc': return rows.sort(byNum('commentCount', false));
+    case 'commentsAsc' : return rows.sort(byNum('commentCount', true ));
+    case 'avgDesc' : return rows.sort(byNum('__avgPerDay', false));
+    case 'avgAsc'  : return rows.sort(byNum('__avgPerDay', true ));
+    case 'newest'  : return rows.sort((a,b)=> new Date(b.publishedAt) - new Date(a.publishedAt));
+    case 'oldest'  : return rows.sort((a,b)=> new Date(a.publishedAt) - new Date(b.publishedAt));
+    default        : return rows.sort((a,b)=> a.__idx - b.__idx);
+  }
+}
+
+/* ========= 描画 ========= */
+function renderRows(rows){
+  const now = Date.now();
+  rows = rows.map(r=>{
+    const t = new Date(r.publishedAt||0).getTime();
+    const ageDays = isFinite(t)? Math.max((now - t)/86400000, 1/24): NaN;
+    const views = (r.viewCount==null||isNaN(r.viewCount))? NaN : Number(r.viewCount);
+    const avg = (isNaN(views)||isNaN(ageDays)) ? NaN : Math.round((views/ageDays)*10)/10;
+    return {...r, __avgPerDay: avg};
+  });
+
+  listEl.innerHTML = '';
+  chipGot.textContent = `取得件数：${rows.length}`;
+
+  const frag = document.createDocumentFragment();
+  rows.forEach((r, i) => {
+    const li = document.createElement('li');
+    li.className = 'v';
+
+    const a = document.createElement('a');
+    a.href = r.url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = r.title || '(no title)';
+    li.appendChild(a);
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML = [
+      `${fmtNum(r.viewCount)}回 再生`,
+      (r.likeCount==null? '-' : `${fmtNum(r.likeCount)} 高評価`),
+      (r.commentCount==null? '-' : `${fmtNum(r.commentCount)} コメント`),
+      (r.__avgPerDay!=null && !isNaN(r.__avgPerDay) ? `平均/日 ${fmtNum(r.__avgPerDay)}` : '-'),
+      (r.publishedAt ? new Date(r.publishedAt).toLocaleDateString('ja-JP') : '-')
+    ].map((t,idx)=> idx===0 ? t : `<span class="sep"></span>${t}`).join('');
+    li.appendChild(meta);
+
+    frag.appendChild(li);
+  });
+  listEl.appendChild(frag);
+}
+
+function setChannel(ch, got=0){
+  if (!ch){
+    chPanel.style.display = 'none';
+    chipGot.textContent = '取得件数：0';
+    return;
+  }
+  chPanel.style.display = '';
+  chTitle.innerHTML = `<a href="${ch.url}" target="_blank" rel="noopener">${esc(ch.title||'')}</a>`;
+  chipSubs.textContent = `登録者数：${fmtNum(ch.subscriberCount)}人`;
+  chipViews.textContent = `総再生回数：${fmtNum(ch.viewCount)}回`;
+  chipCount.textContent = `動画数：${fmtNum(ch.videoCount)}本`;
+  chipGot.textContent = `取得件数：${got}`;
+}
+
+/* ========= 小物 ========= */
+function toRowFromDetail(d, id, i){
+  return {
+    url: `https://www.youtube.com/watch?v=${id}`,
+    title: d?.title ?? '',
+    viewCount: d?.viewCount ?? null,
+    likeCount: d?.likeCount ?? null,
+    commentCount: d?.commentCount ?? null,
+    publishedAt: d?.publishedAt ?? '',
+    videoId: id,
+    __idx: i
+  };
+}
+function busy(b, msg){
+  runBtn.disabled = b;
+  statusEl.textContent = b ? (msg || '取得中…') : '';
+}
+function toast(msg){
+  statusEl.textContent = msg;
+  setTimeout(()=> statusEl.textContent = '', 1600);
+}
+function fmtNum(n){ return (n==null || isNaN(n)) ? '-' : Number(n).toLocaleString('ja-JP'); }
+function esc(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+</script>
