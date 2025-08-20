@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>YouTube 全件取得（直API）— 見やすいテキスト出力</title>
+<title>YouTube 全件取得 — 見やすいテキスト出力（安全プロキシ版）</title>
 <style>
   :root{
     --bg: #0b0c10;
@@ -38,26 +38,26 @@
       radial-gradient(1200px 500px at 100% 0%, #1a2233 0%, transparent 50%),
       var(--bg);
     color:var(--text);
-    font: 16px/1.7 system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans JP",sans-serif;
+    font: 16px/1.75 system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans JP",sans-serif;
     -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
   }
-  .wrap{ max-width:1000px; margin:0 auto; padding:18px; }
+  .wrap{ max-width:1000px; margin:0 auto; padding:22px 18px 48px }
   header h1{
-    margin: 6px 0 2px;
+    margin: 6px 0 6px;
     font-size: clamp(18px, 4.5vw, 28px);
     letter-spacing:.2px;
   }
-  header p{ margin: 4px 0 0; color:var(--muted); font-size: .95rem }
+  header p{ margin: 6px 0 0; color:var(--muted); font-size: .95rem }
   .panel{
     background: var(--panel);
     border: 1px solid var(--bd);
     border-radius: 16px;
-    padding: 14px;
-    margin: 14px 0;
+    padding: 16px;
+    margin: 14px 0 18px;
     backdrop-filter: blur(8px) saturate(1.2);
   }
-  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center }
-  .grid{ display:grid; gap:10px; grid-template-columns: 1fr }
+  .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:center }
+  .grid{ display:grid; gap:12px; grid-template-columns: 1fr }
   @media (min-width: 760px){ .grid.cols-2{ grid-template-columns: 1.4fr 1fr } }
   label{ display:block; font-weight:700; margin:2px 0 6px; font-size: .92rem }
   input,select,button{
@@ -75,13 +75,14 @@
     background: linear-gradient(180deg, var(--accent), var(--accent-2));
     color:#fff; border: none; cursor: pointer; font-weight: 800;
     box-shadow: 0 6px 18px color-mix(in oklab, var(--accent-2) 35%, transparent);
-    transition: transform .06s ease;
+    transition: transform .06s ease, filter .15s ease;
   }
   .btn:active{ transform: translateY(1px) scale(.998) }
+  .btn:hover{ filter: brightness(1.03) }
   .status{ color:var(--muted); min-height:1.2em }
   .statbar{
-    display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between;
-    padding:10px 12px; border-radius:14px; border:1px dashed var(--bd);
+    display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;
+    padding:12px 12px; border-radius:14px; border:1px dashed var(--bd);
     background: color-mix(in oklab, var(--panel-strong) 70%, transparent);
   }
   .ch-title{
@@ -91,13 +92,15 @@
   .ch-title a{ color:inherit; text-decoration:none; border-bottom:1px dotted color-mix(in oklab, var(--text) 30%, transparent) }
   .chips{ display:flex; flex-wrap:wrap; gap:8px }
   .chip{
-    border:1px solid var(--bd); border-radius:999px; padding:.35em .7em; background: transparent;
+    border:1px solid var(--bd); border-radius:999px; padding:.4em .8em; background: transparent;
     font-weight:700; color:var(--muted);
   }
   .count{ background: color-mix(in oklab, var(--accent) 20%, transparent); color:#fff; border-color: transparent }
   ol.video-list{ list-style:none; margin: 10px 0 0; padding:0; counter-reset: vid }
-  .v{ position:relative; border:1px solid var(--bd); border-radius:14px; padding:12px 12px 10px; margin:10px 0;
-      background: color-mix(in oklab, var(--panel-strong) 80%, transparent); display:grid; gap:2px }
+  .v{
+    position:relative; border:1px solid var(--bd); border-radius:14px; padding:12px 12px 10px; margin:12px 0;
+    background: color-mix(in oklab, var(--panel-strong) 80%, transparent); display:grid; gap:6px
+  }
   .v::before{
     counter-increment: vid; content: counter(vid);
     position:absolute; inset: -12px auto auto -12px;
@@ -118,24 +121,9 @@
 
 <div class="wrap">
   <header>
-    <h1>YouTube 全件取得（直API）</h1>
-    <p class="help">URL を 1つ貼り付け → <span class="kbd">取得</span>。@ハンドル / UCID / チャンネルURL / 動画URL / プレイリストURL すべてOK。</p>
+    <h1>YouTube 全件取得（安全プロキシ利用）</h1>
+    <p class="help">URL を 1つ貼り付け → <span class="kbd">取得</span>。@ハンドル / UCID / チャンネルURL / 動画URL / プレイリストURL すべてOK。APIキーはサーバー保管なので表示されません。</p>
   </header>
-
-  <!-- セットアップ -->
-  <section class="panel fade-in">
-    <div class="grid cols-2">
-      <div>
-        <label>APIキー（YouTube Data API v3）</label>
-        <input id="apiKey" placeholder="AIza..." autocomplete="off" />
-      </div>
-      <div>
-        <label>&nbsp;</label>
-        <button id="saveKey" class="btn">この端末に保存</button>
-      </div>
-    </div>
-    <div style="margin-top:8px" class="muted help">※ キーはブラウザの <b>localStorage</b> にのみ保存されます。</div>
-  </section>
 
   <!-- 入力とコントロール -->
   <section class="panel fade-in">
@@ -180,7 +168,7 @@
     </div>
   </section>
 
-  <!-- 出力（テキストを上質に見せる） -->
+  <!-- 出力 -->
   <section class="panel fade-in">
     <ol id="list" class="video-list"></ol>
   </section>
@@ -188,47 +176,72 @@
   <!-- ヘルプ -->
   <section class="panel fade-in help">
     <details>
-      <summary class="muted">ヒント</summary>
+      <summary class="muted">ヒント / セキュリティ</summary>
       <ul>
         <li>動画URLを貼ると、その動画の<strong>所属チャンネルの全動画</strong>を取得します。</li>
         <li>プレイリストURL/IDを貼ると、その<strong>プレイリストの全動画</strong>を取得します（チャンネル統計は表示されません）。</li>
         <li>上限は最大 5,000 本（APIクォータに注意）。</li>
+        <li>APIキーはサーバー側のプロパティに保管し、フロント・ネットワークに露出しません。</li>
       </ul>
     </details>
   </section>
 </div>
 
 <script>
-/* ========= DOM 参照 ========= */
-const apiKeyIn = document.getElementById('apiKey');
-const saveKeyBtn = document.getElementById('saveKey');
+/* ========= 設定 ========= */
+/** あなたの GAS WebアプリURL（末尾 /exec）に置き換えてください */
+const API_BASE = '<<YOUR_GAS_WEBAPP_EXEC_URL>>';
+
+/* ========= DOM ========= */
 const inputUrl = document.getElementById('inputUrl');
 const postSort = document.getElementById('postSort');
-const runBtn = document.getElementById('run');
+const runBtn   = document.getElementById('run');
 const statusEl = document.getElementById('status');
 
-const chPanel = document.getElementById('chPanel');
-const chTitle = document.getElementById('chTitle');
+const chPanel  = document.getElementById('chPanel');
+const chTitle  = document.getElementById('chTitle');
 const chipSubs = document.getElementById('chipSubs');
-const chipViews = document.getElementById('chipViews');
-const chipCount = document.getElementById('chipCount');
-const chipGot = document.getElementById('chipGot');
-
-const listEl = document.getElementById('list');
+const chipViews= document.getElementById('chipViews');
+const chipCount= document.getElementById('chipCount');
+const chipGot  = document.getElementById('chipGot');
+const listEl   = document.getElementById('list');
 
 /* ========= 状態 ========= */
 let lastRows = [];
 let lastChannel = null;
 const MAX_FETCH = 5000;
 
-/* ========= ストレージ ========= */
-apiKeyIn.value = localStorage.getItem('yt_api_key') || '';
-saveKeyBtn.onclick = () => {
-  localStorage.setItem('yt_api_key', apiKeyIn.value.trim());
-  toast('APIキーを保存しました');
-};
+/* ========= JSONPユーティリティ ========= */
+function jsonp(endpoint, params={}){
+  const cbName = '__jp' + Math.random().toString(36).slice(2);
+  return new Promise((resolve, reject)=>{
+    const scr = document.createElement('script');
+    const u = new URL(API_BASE);
+    u.searchParams.set('op', endpoint);
+    for (const [k,v] of Object.entries(params)) if (v!=null) u.searchParams.set(k, String(v));
+    u.searchParams.set('callback', cbName);
 
-/* ========= 取得ボタン ========= */
+    const timer = setTimeout(()=>{
+      cleanup(); reject(new Error('JSONP timeout'));
+    }, 30000);
+
+    function cleanup(){
+      clearTimeout(timer);
+      delete window[cbName];
+      scr.remove();
+    }
+    window[cbName] = (data)=>{
+      cleanup();
+      if (data && data.error) reject(new Error(data.error));
+      else resolve(data);
+    };
+    scr.onerror = ()=>{ cleanup(); reject(new Error('JSONP network error')); };
+    scr.src = u.toString();
+    document.body.appendChild(scr);
+  });
+}
+
+/* ========= UIハンドラ ========= */
 runBtn.onclick = async () => {
   const raw = inputUrl.value.trim();
   if (!raw) return alert('URL を入力してください');
@@ -237,18 +250,12 @@ runBtn.onclick = async () => {
     setChannel(null);
     renderRows([]);
 
-    const key = getKeyOrThrow();
-    const {rows, channel} = await runViaClient(key, raw);
+    const {rows, channel} = await runViaProxy(raw);
 
-    // 並び替え適用
     const sorted = sortAfter(rows, postSort.value);
-
-    lastRows = sorted;
-    lastChannel = channel;
-
+    lastRows = sorted; lastChannel = channel;
     setChannel(channel, sorted.length);
     renderRows(sorted);
-
     toast(`${sorted.length} 件 取得しました`);
   }catch(err){
     console.error(err);
@@ -260,21 +267,20 @@ runBtn.onclick = async () => {
   }
 };
 
-/* ========= 並び替え ========= */
 postSort.addEventListener('change', () => {
   if (!lastRows.length) return;
   const rows = sortAfter([...lastRows], postSort.value);
   renderRows(rows);
 });
 
-/* ========= クライアント直API ========= */
-async function runViaClient(key, raw){
+/* ========= プロキシ経由の処理 ========= */
+async function runViaProxy(raw){
   const type = detectInputType(raw);
 
   // プレイリスト → そのまま全件
   if (type.kind === 'playlist'){
-    const ids = await listPlaylistVideoIds(type.playlistId, key, MAX_FETCH);
-    const details = await fetchVideosDetails(ids, key);
+    const ids = await listPlaylistVideoIds_Proxy(type.playlistId, MAX_FETCH);
+    const details = await fetchVideosDetails_Proxy(ids);
     const rows = ids.map((id,i)=> toRowFromDetail(details.get(id), id, i));
     return { rows, channel: null };
   }
@@ -282,25 +288,25 @@ async function runViaClient(key, raw){
   // チャンネル or 動画 → チャンネルIDへ
   let channelId = null;
   if (type.kind === 'channel') channelId = type.channelId;
-  if (type.kind === 'video')   channelId = await getChannelIdFromVideo(type.videoId, key);
+  if (type.kind === 'video')   channelId = await getChannelIdFromVideo_Proxy(type.videoId);
   if (type.kind === 'channelQuery'){
-    channelId = await searchChannelIdByQuery(type.q, key);
+    channelId = await searchChannelIdByQuery_Proxy(type.q);
   }
   if (!channelId) throw new Error('チャンネルIDを解決できませんでした');
 
-  const [uploads, channel] = await Promise.all([
-    getUploadsPlaylistId(channelId, key),
-    fetchChannelInfo(channelId, key)
+  const [uploadsInfo, channel] = await Promise.all([
+    getUploadsPlaylistId_Proxy(channelId),
+    fetchChannelInfo_Proxy(channelId)
   ]);
-  if (!uploads) throw new Error('アップロード済みプレイリストが見つかりませんでした');
+  if (!uploadsInfo?.uploads) throw new Error('アップロード済みプレイリストが見つかりませんでした');
 
-  const ids = await listPlaylistVideoIds(uploads, key, MAX_FETCH);
-  const details = await fetchVideosDetails(ids, key);
+  const ids = await listPlaylistVideoIds_Proxy(uploadsInfo.uploads, MAX_FETCH);
+  const details = await fetchVideosDetails_Proxy(ids);
   const rows = ids.map((id,i)=> toRowFromDetail(details.get(id), id, i));
   return { rows, channel };
 }
 
-/* ========= 入力タイプ検出 ========= */
+/* ========= 入力タイプ検出（そのまま流用） ========= */
 function detectInputType(raw){
   const s = String(raw||'').trim();
   if (!s) return { kind:'unknown' };
@@ -313,227 +319,3 @@ function detectInputType(raw){
       const parts = u.pathname.replace(/\/+$/,'').split('/').filter(Boolean);
       const vid = u.searchParams.get('v') || (['shorts','embed','live'].includes(parts[0]) ? parts[1] : null);
       const list = u.searchParams.get('list');
-      if (host==='youtu.be' && parts[0]) return { kind:'video', videoId: parts[0].slice(0,11) };
-      if (vid) return { kind:'video', videoId: vid.slice(0,11) };
-      if (list) return { kind:'playlist', playlistId: list };
-      const mCh = u.pathname.match(/\/channel\/(UC[0-9A-Za-z_-]{22})$/);
-      if (mCh) return { kind:'channel', channelId:mCh[1] };
-      const mHandle = u.pathname.match(/\/@([^/]+)$/);
-      if (mHandle) return { kind:'channelQuery', q:mHandle[1] };
-      const mCustom = u.pathname.match(/\/(c|user)\/([^/]+)$/);
-      if (mCustom) return { kind:'channelQuery', q:mCustom[2] };
-    }catch{}
-  }
-  if (/^[0-9A-Za-z_-]{11}$/.test(s)) return { kind:'video', videoId:s };
-  return { kind:'channelQuery', q:s };
-}
-
-/* ========= YouTube Data API ========= */
-async function fetchChannelInfo(channelId, key){
-  const ep = new URL('https://www.googleapis.com/youtube/v3/channels');
-  ep.searchParams.set('part','snippet,statistics');
-  ep.searchParams.set('id',channelId);
-  ep.searchParams.set('key',key);
-  const r = await fetch(ep); await assertOk(r, 'channels(stats) API');
-  const j = await r.json();
-  const it = j.items?.[0]; if (!it) return null;
-  const sn = it.snippet||{}, st = it.statistics||{};
-  return {
-    id: it.id,
-    title: sn.title||'',
-    url: `https://www.youtube.com/channel/${it.id}`,
-    subscriberCount: st.subscriberCount!=null? Number(st.subscriberCount):null,
-    viewCount:       st.viewCount!=null? Number(st.viewCount):null,
-    videoCount:      st.videoCount!=null? Number(st.videoCount):null
-  };
-}
-async function getChannelIdFromVideo(videoId, key){
-  const ep = new URL('https://www.googleapis.com/youtube/v3/videos');
-  ep.searchParams.set('part','snippet');
-  ep.searchParams.set('id',videoId);
-  ep.searchParams.set('key',key);
-  const r = await fetch(ep); await assertOk(r, 'videos API');
-  const j = await r.json();
-  return j.items?.[0]?.snippet?.channelId || null;
-}
-async function getUploadsPlaylistId(channelId, key){
-  const ep = new URL('https://www.googleapis.com/youtube/v3/channels');
-  ep.searchParams.set('part','contentDetails');
-  ep.searchParams.set('id',channelId);
-  ep.searchParams.set('key',key);
-  const r = await fetch(ep); await assertOk(r, 'channels API');
-  const j = await r.json();
-  return j.items?.[0]?.contentDetails?.relatedPlaylists?.uploads || null;
-}
-async function listPlaylistVideoIds(playlistId, key, maxCount){
-  let ids = [], pageToken = '';
-  while (ids.length < Math.min(maxCount, MAX_FETCH)){
-    const ep = new URL('https://www.googleapis.com/youtube/v3/playlistItems');
-    ep.searchParams.set('part','contentDetails');
-    ep.searchParams.set('playlistId',playlistId);
-    ep.searchParams.set('maxResults','50');
-    if (pageToken) ep.searchParams.set('pageToken', pageToken);
-    ep.searchParams.set('key',key);
-    const r = await fetch(ep); await assertOk(r, 'playlistItems API');
-    const j = await r.json();
-    for (const it of (j.items||[])){
-      const id = it?.contentDetails?.videoId;
-      if (id) ids.push(id);
-    }
-    pageToken = j.nextPageToken || '';
-    if (!pageToken) break;
-    busy(true, `取得中… ${ids.length}件`);
-  }
-  return ids.slice(0, Math.min(maxCount, MAX_FETCH));
-}
-async function fetchVideosDetails(videoIds, key){
-  const map = new Map();
-  for (let i=0;i<videoIds.length;i+=50){
-    const chunk = videoIds.slice(i,i+50);
-    const ep = new URL('https://www.googleapis.com/youtube/v3/videos');
-    ep.searchParams.set('part','snippet,statistics');
-    ep.searchParams.set('id', chunk.join(','));
-    ep.searchParams.set('key', key);
-    const r = await fetch(ep); await assertOk(r, 'videos(details) API');
-    const j = await r.json();
-    for (const it of (j.items||[])){
-      map.set(it.id, {
-        title: it.snippet?.title ?? '',
-        viewCount: it.statistics?.viewCount!=null? Number(it.statistics.viewCount):null,
-        likeCount: it.statistics?.likeCount!=null? Number(it.statistics.likeCount):null,
-        commentCount: it.statistics?.commentCount!=null? Number(it.statistics.commentCount):null,
-        publishedAt: it.snippet?.publishedAt ?? ''
-      });
-    }
-  }
-  return map;
-}
-async function searchChannelIdByQuery(query, key){
-  const ep = new URL('https://www.googleapis.com/youtube/v3/search');
-  ep.searchParams.set('part','snippet');
-  ep.searchParams.set('type','channel');
-  ep.searchParams.set('q', query);
-  ep.searchParams.set('maxResults','1');
-  ep.searchParams.set('key', key);
-  const r = await fetch(ep); await assertOk(r, 'search(query) API');
-  const j = await r.json();
-  return j.items?.[0]?.id?.channelId || null;
-}
-
-/* ========= 並び替えロジック ========= */
-function sortAfter(rows, key){
-  const byNum = (field, asc=true)=>(a,b)=>{
-    const av=Number(a[field]), bv=Number(b[field]);
-    const aNaN=isNaN(av), bNaN=isNaN(bv);
-    if (aNaN && bNaN) return a.__idx-b.__idx;
-    if (aNaN) return 1; if (bNaN) return -1;
-    return asc? (av-bv):(bv-av);
-  };
-  switch(key){
-    case 'viewsDesc': return rows.sort(byNum('viewCount', false));
-    case 'viewsAsc' : return rows.sort(byNum('viewCount', true ));
-    case 'likesDesc': return rows.sort(byNum('likeCount', false));
-    case 'likesAsc' : return rows.sort(byNum('likeCount', true ));
-    case 'commentsDesc': return rows.sort(byNum('commentCount', false));
-    case 'commentsAsc' : return rows.sort(byNum('commentCount', true ));
-    case 'avgDesc' : return rows.sort(byNum('__avgPerDay', false));
-    case 'avgAsc'  : return rows.sort(byNum('__avgPerDay', true ));
-    case 'newest'  : return rows.sort((a,b)=> new Date(b.publishedAt) - new Date(a.publishedAt));
-    case 'oldest'  : return rows.sort((a,b)=> new Date(a.publishedAt) - new Date(b.publishedAt));
-    default        : return rows.sort((a,b)=> a.__idx - b.__idx);
-  }
-}
-
-/* ========= 描画 ========= */
-function renderRows(rows){
-  // 追加項目: 平均/日
-  const now = Date.now();
-  rows = rows.map(r=>{
-    const t = new Date(r.publishedAt||0).getTime();
-    const ageDays = isFinite(t)? Math.max((now - t)/86400000, 1/24): NaN;
-    const views = (r.viewCount==null||isNaN(r.viewCount))? NaN : Number(r.viewCount);
-    const avg = (isNaN(views)||isNaN(ageDays)) ? NaN : Math.round((views/ageDays)*10)/10;
-    return {...r, __avgPerDay: avg};
-  });
-
-  listEl.innerHTML = '';
-  chipGot.textContent = `取得件数：${rows.length}`;
-
-  const frag = document.createDocumentFragment();
-  rows.forEach((r, i) => {
-    const li = document.createElement('li');
-    li.className = 'v';
-
-    // タイトル（リンク）
-    const a = document.createElement('a');
-    a.href = r.url;
-    a.target = '_blank';
-    a.rel = 'noopener';
-    a.textContent = r.title || '(no title)';
-    li.appendChild(a);
-
-    // メタ
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    meta.innerHTML = [
-      `${fmtNum(r.viewCount)}回 再生`,
-      (r.likeCount==null? '-' : `${fmtNum(r.likeCount)} 高評価`),
-      (r.commentCount==null? '-' : `${fmtNum(r.commentCount)} コメント`),
-      (r.__avgPerDay!=null && !isNaN(r.__avgPerDay) ? `平均/日 ${fmtNum(r.__avgPerDay)}` : '-'),
-      (r.publishedAt ? new Date(r.publishedAt).toLocaleDateString('ja-JP') : '-')
-    ].map((t,idx)=> idx===0 ? t : `<span class="sep"></span>${t}`).join('');
-    li.appendChild(meta);
-
-    frag.appendChild(li);
-  });
-  listEl.appendChild(frag);
-}
-
-function setChannel(ch, got=0){
-  if (!ch){
-    chPanel.style.display = 'none';
-    chipGot.textContent = '取得件数：0';
-    return;
-  }
-  chPanel.style.display = '';
-  chTitle.innerHTML = `<a href="${ch.url}" target="_blank" rel="noopener">${esc(ch.title||'')}</a>`;
-  chipSubs.textContent = `登録者数：${fmtNum(ch.subscriberCount)}人`;
-  chipViews.textContent = `総再生回数：${fmtNum(ch.viewCount)}回`;
-  chipCount.textContent = `動画数：${fmtNum(ch.videoCount)}本`;
-  chipGot.textContent = `取得件数：${got}`;
-}
-
-/* ========= 小物 ========= */
-function toRowFromDetail(d, id, i){
-  return {
-    url: `https://www.youtube.com/watch?v=${id}`,
-    title: d?.title ?? '',
-    viewCount: d?.viewCount ?? null,
-    likeCount: d?.likeCount ?? null,
-    commentCount: d?.commentCount ?? null,
-    publishedAt: d?.publishedAt ?? '',
-    videoId: id,
-    __idx: i
-  };
-}
-function getKeyOrThrow(){
-  const k = apiKeyIn.value.trim();
-  if (!k) throw new Error('APIキーを入力してください');
-  return k;
-}
-function busy(b, msg){
-  runBtn.disabled = b;
-  statusEl.textContent = b ? (msg || '取得中…') : '';
-}
-function toast(msg){
-  statusEl.textContent = msg;
-  setTimeout(()=> statusEl.textContent = '', 1600);
-}
-function fmtNum(n){ return (n==null || isNaN(n)) ? '-' : Number(n).toLocaleString('ja-JP'); }
-function esc(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-async function assertOk(res, label){
-  if (res.ok) return;
-  let body=''; try{ body=' / '+(await res.text()).slice(0,200) }catch{}
-  throw new Error(`${label} エラー: ${res.status}${body}`);
-}
-</script>
