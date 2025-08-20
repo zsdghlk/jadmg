@@ -1,9 +1,16 @@
 <!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<!-- 任意: 簡易CSP（JSONPで script.google.com を許可） -->
+
+<!-- ★ CSP: インラインJSを nonce で許可しつつ、外部は self と script.google.com のみ許可 -->
+<!--     JSONPは https://script.google.com を使用。 -->
 <meta http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' https://script.google.com; connect-src 'self' https://script.google.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
+      content="default-src 'self';
+               script-src 'self' https://script.google.com 'nonce-yttool123';
+               connect-src 'self' https://script.google.com;
+               img-src 'self' data:;
+               style-src 'self' 'unsafe-inline'">
+
 <title>YouTube 全件取得 — 見やすいテキスト出力（安全プロキシ版）</title>
 <style>
   :root{
@@ -159,10 +166,11 @@
   </section>
 </div>
 
-<script>
+<!-- ★ inline script に nonce を付与（CSP と一致させる） -->
+<script nonce="yttool123">
 /* ========= 設定 ========= */
 /** 必ずあなたの GAS WebアプリURL（末尾 /exec）に置き換え */
-const API_BASE = 'https://script.google.com/macros/s/AKfycbxOwLPNL5zlcyzChiywKmFNzrtKDgC1JrcUJAs3FB8cG5UlOUoyDi4VvDY-cVuMq9czdg/exec';
+const API_BASE = '<<PASTE_YOUR_GAS_WEBAPP_EXEC_URL_HERE>>';
 
 /* ========= DOM ========= */
 const inputUrl = document.getElementById('inputUrl');
@@ -182,6 +190,15 @@ const listEl   = document.getElementById('list');
 let lastRows = [];
 let lastChannel = null;
 const MAX_FETCH = 5000;
+
+/* ========= 起動時検査（API_BASE 未設定の早期通知） ========= */
+(function bootCheck(){
+  const base = (API_BASE||'').trim();
+  if (!/^https?:\/\/.+\/exec(?:[/?].*)?$/.test(base)) {
+    statusEl.textContent = 'エラー: API_BASE が未設定か不正です（/exec の完全URLを設定）';
+    runBtn.disabled = true;
+  }
+})();
 
 /* ========= JSONPユーティリティ（URL妥当性チェック込み） ========= */
 function jsonp(endpoint, params={}){
@@ -392,7 +409,7 @@ function renderRows(rows){
     const a = document.createElement('a');
     a.href = r.url;
     a.target = '_blank';
-    a.rel = 'noopener';
+    a.rel = 'noopener noreferrer';
     a.textContent = r.title || '(no title)';
     li.appendChild(a);
 
@@ -419,7 +436,7 @@ function setChannel(ch, got=0){
     return;
   }
   chPanel.style.display = '';
-  chTitle.innerHTML = `<a href="${ch.url}" target="_blank" rel="noopener">${esc(ch.title||'')}</a>`;
+  chTitle.innerHTML = `<a href="${ch.url}" target="_blank" rel="noopener noreferrer">${esc(ch.title||'')}</a>`;
   chipSubs.textContent = `登録者数：${fmtNum(ch.subscriberCount)}人`;
   chipViews.textContent = `総再生回数：${fmtNum(ch.viewCount)}回`;
   chipCount.textContent = `動画数：${fmtNum(ch.videoCount)}本`;
