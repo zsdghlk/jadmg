@@ -5,10 +5,11 @@
 <!-- CSP: インラインJSは nonce だけ許可。外部は self と script.google.com のみ -->
 <meta http-equiv="Content-Security-Policy"
       content="default-src 'self';
-               script-src 'self' https://script.google.com 'nonce-yttool123';
-               connect-src 'self' https://script.google.com;
+               script-src 'self' https://script.google.com https://script.googleusercontent.com 'nonce-yttool123';
+               connect-src 'self' https://script.google.com https://script.googleusercontent.com;
                img-src 'self' data:;
                style-src 'self' 'unsafe-inline'">
+
 
 <title>YouTube 全件取得 — 見やすいテキスト出力（安全プロキシ版）</title>
 <style>
