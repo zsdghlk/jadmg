@@ -1,35 +1,22 @@
 <!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- 任意: 簡易CSP（JSONPで script.google.com を許可） -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' https://script.google.com; connect-src 'self' https://script.google.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
 <title>YouTube 全件取得 — 見やすいテキスト出力（安全プロキシ版）</title>
 <style>
   :root{
-    --bg: #0b0c10;
-    --panel: #121317cc;
-    --panel-strong:#161821;
-    --text: #eef2f7;
-    --muted:#9aa0a6;
-    --bd:#1f2128;
-    --accent:#6ea8fe;
-    --accent-2:#4f8cff;
-    --ok:#1db954;
-    --warn:#ffb020;
+    --bg:#0b0c10; --panel:#121317cc; --panel-strong:#161821; --text:#eef2f7; --muted:#9aa0a6; --bd:#1f2128;
+    --accent:#6ea8fe; --accent-2:#4f8cff; --ok:#1db954; --warn:#ffb020;
   }
   @media (prefers-color-scheme: light){
     :root{
-      --bg:#f6f7fb;
-      --panel:#ffffffcc;
-      --panel-strong:#ffffff;
-      --text:#0a0b0f;
-      --muted:#5d6269;
-      --bd:#e6e8ee;
-      --accent:#1e88e5;
-      --accent-2:#1565c0;
-      --ok:#0aa84f;
-      --warn:#f5a623;
+      --bg:#f6f7fb; --panel:#ffffffcc; --panel-strong:#ffffff; --text:#0a0b0f; --muted:#5d6269; --bd:#e6e8ee;
+      --accent:#1e88e5; --accent-2:#1565c0; --ok:#0aa84f; --warn:#f5a623;
     }
   }
-  *{ box-sizing: border-box }
+  *{ box-sizing:border-box }
   html,body{ height:100% }
   body{
     margin:0;
@@ -38,43 +25,29 @@
       radial-gradient(1200px 500px at 100% 0%, #1a2233 0%, transparent 50%),
       var(--bg);
     color:var(--text);
-    font: 16px/1.75 system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans JP",sans-serif;
+    font:16px/1.75 system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans JP",sans-serif;
     -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
   }
   .wrap{ max-width:1000px; margin:0 auto; padding:22px 18px 48px }
-  header h1{
-    margin: 6px 0 6px;
-    font-size: clamp(18px, 4.5vw, 28px);
-    letter-spacing:.2px;
-  }
-  header p{ margin: 6px 0 0; color:var(--muted); font-size: .95rem }
+  header h1{ margin:6px 0 6px; font-size:clamp(18px,4.5vw,28px); letter-spacing:.2px }
+  header p{ margin:6px 0 0; color:var(--muted); font-size:.95rem }
   .panel{
-    background: var(--panel);
-    border: 1px solid var(--bd);
-    border-radius: 16px;
-    padding: 16px;
-    margin: 14px 0 18px;
+    background:var(--panel); border:1px solid var(--bd); border-radius:16px; padding:16px; margin:14px 0 18px;
     backdrop-filter: blur(8px) saturate(1.2);
   }
   .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:center }
-  .grid{ display:grid; gap:12px; grid-template-columns: 1fr }
-  @media (min-width: 760px){ .grid.cols-2{ grid-template-columns: 1.4fr 1fr } }
-  label{ display:block; font-weight:700; margin:2px 0 6px; font-size: .92rem }
+  .grid{ display:grid; gap:12px; grid-template-columns:1fr }
+  @media (min-width:760px){ .grid.cols-2{ grid-template-columns:1.4fr 1fr } }
+  label{ display:block; font-weight:700; margin:2px 0 6px; font-size:.92rem }
   input,select,button{
-    width:100%; padding:12px 13px;
-    border-radius: 12px; outline: none;
-    border:1px solid var(--bd);
-    background: #0d0f14;
-    color:var(--text);
+    width:100%; padding:12px 13px; border-radius:12px; outline:none; border:1px solid var(--bd);
+    background:#0d0f14; color:var(--text);
   }
-  @media (prefers-color-scheme: light){
-    input,select,button{ background:#fff }
-  }
+  @media (prefers-color-scheme: light){ input,select,button{ background:#fff } }
   input::placeholder{ color: color-mix(in oklab, var(--muted) 85%, transparent) }
   .btn{
-    background: linear-gradient(180deg, var(--accent), var(--accent-2));
-    color:#fff; border: none; cursor: pointer; font-weight: 800;
-    box-shadow: 0 6px 18px color-mix(in oklab, var(--accent-2) 35%, transparent);
+    background:linear-gradient(180deg, var(--accent), var(--accent-2)); color:#fff; border:none; cursor:pointer; font-weight:800;
+    box-shadow:0 6px 18px color-mix(in oklab, var(--accent-2) 35%, transparent);
     transition: transform .06s ease, filter .15s ease;
   }
   .btn:active{ transform: translateY(1px) scale(.998) }
@@ -82,37 +55,36 @@
   .status{ color:var(--muted); min-height:1.2em }
   .statbar{
     display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;
-    padding:12px 12px; border-radius:14px; border:1px dashed var(--bd);
+    padding:12px; border-radius:14px; border:1px dashed var(--bd);
     background: color-mix(in oklab, var(--panel-strong) 70%, transparent);
   }
-  .ch-title{
-    font-weight:900; font-size: clamp(16px, 3.8vw, 20px);
-    display:flex; align-items:center; gap:10px;
-  }
+  .ch-title{ font-weight:900; font-size:clamp(16px,3.8vw,20px); display:flex; align-items:center; gap:10px }
   .ch-title a{ color:inherit; text-decoration:none; border-bottom:1px dotted color-mix(in oklab, var(--text) 30%, transparent) }
   .chips{ display:flex; flex-wrap:wrap; gap:8px }
   .chip{
-    border:1px solid var(--bd); border-radius:999px; padding:.4em .8em; background: transparent;
-    font-weight:700; color:var(--muted);
+    border:1px solid var(--bd); border-radius:999px; padding:.4em .8em; background:transparent; font-weight:700; color:var(--muted);
   }
-  .count{ background: color-mix(in oklab, var(--accent) 20%, transparent); color:#fff; border-color: transparent }
-  ol.video-list{ list-style:none; margin: 10px 0 0; padding:0; counter-reset: vid }
+  .count{ background: color-mix(in oklab, var(--accent) 20%, transparent); color:#fff; border-color:transparent }
+  ol.video-list{ list-style:none; margin:10px 0 0; padding:0; counter-reset:vid }
   .v{
     position:relative; border:1px solid var(--bd); border-radius:14px; padding:12px 12px 10px; margin:12px 0;
     background: color-mix(in oklab, var(--panel-strong) 80%, transparent); display:grid; gap:6px
   }
   .v::before{
-    counter-increment: vid; content: counter(vid);
-    position:absolute; inset: -12px auto auto -12px;
-    background: var(--ok); color:#fff; height:28px; min-width:28px; padding:0 8px;
-    border-radius: 999px; display:grid; place-items:center; font-weight:900; font-size:.9rem;
-    box-shadow: 0 6px 14px color-mix(in oklab, var(--ok) 40%, transparent);
+    counter-increment:vid; content:counter(vid);
+    position:absolute; inset:-12px auto auto -12px;
+    background:var(--ok); color:#fff; height:28px; min-width:28px; padding:0 8px;
+    border-radius:999px; display:grid; place-items:center; font-weight:900; font-size:.9rem;
+    box-shadow:0 6px 14px color-mix(in oklab, var(--ok) 40%, transparent);
   }
-  .v a{ color: var(--accent); font-weight: 800; text-decoration: none; }
-  .meta{ color: var(--muted); font-size:.92rem; display:flex; gap:10px; flex-wrap:wrap }
-  .sep::before{ content:'•'; margin: 0 .5em; color: color-mix(in oklab, var(--muted) 70%, transparent) }
+  .v a{ color:var(--accent); font-weight:800; text-decoration:none }
+  .meta{ color:var(--muted); font-size:.92rem; display:flex; gap:10px; flex-wrap:wrap }
+  .sep::before{ content:'•'; margin:0 .5em; color: color-mix(in oklab, var(--muted) 70%, transparent) }
   .muted{ color:var(--muted) }
-  .kbd{ font: 600 .85rem/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, "Noto Sans JP", monospace; background:#07090d; color:#dbe6ff; padding: .35em .55em; border-radius: .5rem; border:1px solid var(--bd) }
+  .kbd{
+    font:600 .85rem/1.1 ui-monospace,SFMono-Regular,Menlo,Consolas,"Noto Sans Mono",monospace;
+    background:#07090d; color:#dbe6ff; padding:.35em .55em; border-radius:.5rem; border:1px solid var(--bd)
+  }
   @media (prefers-color-scheme: light){ .kbd{ background:#fafafa; color:#001b4d } }
   .help{ font-size:.92rem }
   .fade-in{ animation: fade .24s ease both }
@@ -189,8 +161,8 @@
 
 <script>
 /* ========= 設定 ========= */
-/** あなたの GAS WebアプリURL（必ず末尾 /exec）に置き換えてください  */
-const API_BASE = '<<https://script.google.com/macros/s/AKfycbxOwLPNL5zlcyzChiywKmFNzrtKDgC1JrcUJAs3FB8cG5UlOUoyDi4VvDY-cVuMq9czdg/exec>>';
+/** 必ずあなたの GAS WebアプリURL（末尾 /exec）に置き換え */
+const API_BASE = '<<PASTE_YOUR_GAS_WEBAPP_EXEC_URL_HERE>>';
 
 /* ========= DOM ========= */
 const inputUrl = document.getElementById('inputUrl');
@@ -217,30 +189,22 @@ function jsonp(endpoint, params={}){
   if (!/^https?:\/\/.+\/exec(?:[/?].*)?$/.test(base)) {
     throw new Error('API_BASE が未設定か不正です。GAS のウェブアプリURL（/exec）を設定してください。');
   }
-
   const cbName = '__jp' + Math.random().toString(36).slice(2);
   return new Promise((resolve, reject)=>{
     const scr = document.createElement('script');
     let u;
-    try{
-      u = new URL(base);
-    }catch(e){
-      reject(new Error('API_BASE の URL 形式が不正です')); return;
-    }
+    try{ u = new URL(base); }catch(e){ reject(new Error('API_BASE の URL 形式が不正です')); return; }
     u.searchParams.set('op', endpoint);
     for (const [k,v] of Object.entries(params)) if (v!=null) u.searchParams.set(k, String(v));
     u.searchParams.set('callback', cbName);
 
     const timer = setTimeout(()=>{ cleanup(); reject(new Error('JSONP timeout')); }, 30000);
-
     function cleanup(){ clearTimeout(timer); try{ delete window[cbName]; }catch{} scr.remove(); }
 
-    window[cbName] = (data)=>{
-      cleanup();
-      if (data && data.error) reject(new Error(data.error));
-      else resolve(data);
-    };
+    window[cbName] = (data)=>{ cleanup(); if (data && data.error) reject(new Error(data.error)); else resolve(data); };
     scr.onerror = ()=>{ cleanup(); reject(new Error('JSONP network error')); };
+    scr.referrerPolicy = 'no-referrer';
+    scr.async = true;
     scr.src = u.toString();
     document.body.appendChild(scr);
   });
@@ -267,16 +231,11 @@ runBtn.onclick = async () => {
     setChannel(null);
     renderRows([]);
     alert('エラー: ' + (err?.message || err));
-  }finally{
-    busy(false);
-  }
+  }finally{ busy(false); }
 };
 
-postSort.addEventListener('change', () => {
-  if (!lastRows.length) return;
-  const rows = sortAfter([...lastRows], postSort.value);
-  renderRows(rows);
-});
+/* Enterで実行 */
+inputUrl.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') runBtn.click(); });
 
 /* ========= プロキシ経由の処理 ========= */
 async function runViaProxy(raw){
@@ -294,9 +253,7 @@ async function runViaProxy(raw){
   let channelId = null;
   if (type.kind === 'channel') channelId = type.channelId;
   if (type.kind === 'video')   channelId = await getChannelIdFromVideo_Proxy(type.videoId);
-  if (type.kind === 'channelQuery'){
-    channelId = await searchChannelIdByQuery_Proxy(type.q);
-  }
+  if (type.kind === 'channelQuery') channelId = await searchChannelIdByQuery_Proxy(type.q);
   if (!channelId) throw new Error('チャンネルIDを解決できませんでした');
 
   const [uploadsInfo, channel] = await Promise.all([
@@ -342,13 +299,8 @@ function detectInputType(raw){
 /* ========= プロキシAPI呼び出し ========= */
 async function fetchChannelInfo_Proxy(channelId){
   const r = await jsonp('channelInfo', { id: channelId });
-  // yt_channelInfo_ は { data: {..., uploads} } を返す
-  const d = r?.data;
-  if (!d) return null;
-  return {
-    id: d.id, title: d.title, url: d.url,
-    subscriberCount: d.subscriberCount, viewCount: d.viewCount, videoCount: d.videoCount
-  };
+  const d = r?.data; if (!d) return null;
+  return { id:d.id, title:d.title, url:d.url, subscriberCount:d.subscriberCount, viewCount:d.viewCount, videoCount:d.videoCount };
 }
 async function getChannelIdFromVideo_Proxy(videoId){
   const r = await jsonp('channelFromVideo', { id: videoId });
@@ -374,10 +326,10 @@ async function fetchVideosDetails_Proxy(videoIds){
   const map = new Map();
   for (let i=0;i<videoIds.length;i+=50){
     const chunk = videoIds.slice(i,i+50).join(',');
+    busy(true, `詳細取得中… ${Math.min(i+50, videoIds.length)}/${videoIds.length}`);
     const r = await jsonp('videos', { ids: chunk });
     for (const it of (r?.items||[])){
-      const st = it.statistics || {};
-      const sn = it.snippet || {};
+      const st = it.statistics||{}, sn = it.snippet||{};
       map.set(it.id, {
         title: sn.title ?? '',
         viewCount: st.viewCount!=null? Number(st.viewCount):null,
@@ -394,7 +346,7 @@ async function searchChannelIdByQuery_Proxy(query){
   return r?.channelId || null;
 }
 
-/* ========= 並び替えロジック ========= */
+/* ========= 並び替え ========= */
 function sortAfter(rows, key){
   const byNum = (field, asc=true)=>(a,b)=>{
     const av=Number(a[field]), bv=Number(b[field]);
@@ -487,14 +439,8 @@ function toRowFromDetail(d, id, i){
     __idx: i
   };
 }
-function busy(b, msg){
-  runBtn.disabled = b;
-  statusEl.textContent = b ? (msg || '取得中…') : '';
-}
-function toast(msg){
-  statusEl.textContent = msg;
-  setTimeout(()=> statusEl.textContent = '', 1600);
-}
+function busy(b, msg){ runBtn.disabled = b; statusEl.textContent = b ? (msg || '取得中…') : ''; }
+function toast(msg){ statusEl.textContent = msg; setTimeout(()=> statusEl.textContent = '', 1600); }
 function fmtNum(n){ return (n==null || isNaN(n)) ? '-' : Number(n).toLocaleString('ja-JP'); }
 function esc(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 </script>
