@@ -2,8 +2,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-<!-- ★ CSP: インラインJSを nonce で許可しつつ、外部は self と script.google.com のみ許可 -->
-<!--     JSONPは https://script.google.com を使用。 -->
+<!-- CSP: インラインJSは nonce だけ許可。外部は self と script.google.com のみ -->
 <meta http-equiv="Content-Security-Policy"
       content="default-src 'self';
                script-src 'self' https://script.google.com 'nonce-yttool123';
@@ -13,15 +12,9 @@
 
 <title>YouTube 全件取得 — 見やすいテキスト出力（安全プロキシ版）</title>
 <style>
-  :root{
-    --bg:#0b0c10; --panel:#121317cc; --panel-strong:#161821; --text:#eef2f7; --muted:#9aa0a6; --bd:#1f2128;
-    --accent:#6ea8fe; --accent-2:#4f8cff; --ok:#1db954; --warn:#ffb020;
-  }
+  :root{ --bg:#0b0c10; --panel:#121317cc; --panel-strong:#161821; --text:#eef2f7; --muted:#9aa0a6; --bd:#1f2128; --accent:#6ea8fe; --accent-2:#4f8cff; --ok:#1db954; --warn:#ffb020 }
   @media (prefers-color-scheme: light){
-    :root{
-      --bg:#f6f7fb; --panel:#ffffffcc; --panel-strong:#ffffff; --text:#0a0b0f; --muted:#5d6269; --bd:#e6e8ee;
-      --accent:#1e88e5; --accent-2:#1565c0; --ok:#0aa84f; --warn:#f5a623;
-    }
+    :root{ --bg:#f6f7fb; --panel:#ffffffcc; --panel-strong:#ffffff; --text:#0a0b0f; --muted:#5d6269; --bd:#e6e8ee; --accent:#1e88e5; --accent-2:#1565c0; --ok:#0aa84f; --warn:#f5a623 }
   }
   *{ box-sizing:border-box }
   html,body{ height:100% }
@@ -38,60 +31,32 @@
   .wrap{ max-width:1000px; margin:0 auto; padding:22px 18px 48px }
   header h1{ margin:6px 0 6px; font-size:clamp(18px,4.5vw,28px); letter-spacing:.2px }
   header p{ margin:6px 0 0; color:var(--muted); font-size:.95rem }
-  .panel{
-    background:var(--panel); border:1px solid var(--bd); border-radius:16px; padding:16px; margin:14px 0 18px;
-    backdrop-filter: blur(8px) saturate(1.2);
-  }
+  .panel{ background:var(--panel); border:1px solid var(--bd); border-radius:16px; padding:16px; margin:14px 0 18px; backdrop-filter: blur(8px) saturate(1.2) }
   .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:center }
   .grid{ display:grid; gap:12px; grid-template-columns:1fr }
   @media (min-width:760px){ .grid.cols-2{ grid-template-columns:1.4fr 1fr } }
   label{ display:block; font-weight:700; margin:2px 0 6px; font-size:.92rem }
-  input,select,button{
-    width:100%; padding:12px 13px; border-radius:12px; outline:none; border:1px solid var(--bd);
-    background:#0d0f14; color:var(--text);
-  }
+  input,select,button{ width:100%; padding:12px 13px; border-radius:12px; outline:none; border:1px solid var(--bd); background:#0d0f14; color:var(--text) }
   @media (prefers-color-scheme: light){ input,select,button{ background:#fff } }
   input::placeholder{ color: color-mix(in oklab, var(--muted) 85%, transparent) }
-  .btn{
-    background:linear-gradient(180deg, var(--accent), var(--accent-2)); color:#fff; border:none; cursor:pointer; font-weight:800;
-    box-shadow:0 6px 18px color-mix(in oklab, var(--accent-2) 35%, transparent);
-    transition: transform .06s ease, filter .15s ease;
-  }
+  .btn{ background:linear-gradient(180deg, var(--accent), var(--accent-2)); color:#fff; border:none; cursor:pointer; font-weight:800; box-shadow:0 6px 18px color-mix(in oklab, var(--accent-2) 35%, transparent); transition: transform .06s ease, filter .15s ease }
   .btn:active{ transform: translateY(1px) scale(.998) }
   .btn:hover{ filter: brightness(1.03) }
   .status{ color:var(--muted); min-height:1.2em }
-  .statbar{
-    display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;
-    padding:12px; border-radius:14px; border:1px dashed var(--bd);
-    background: color-mix(in oklab, var(--panel-strong) 70%, transparent);
-  }
+  .statbar{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; padding:12px; border-radius:14px; border:1px dashed var(--bd); background: color-mix(in oklab, var(--panel-strong) 70%, transparent) }
   .ch-title{ font-weight:900; font-size:clamp(16px,3.8vw,20px); display:flex; align-items:center; gap:10px }
   .ch-title a{ color:inherit; text-decoration:none; border-bottom:1px dotted color-mix(in oklab, var(--text) 30%, transparent) }
   .chips{ display:flex; flex-wrap:wrap; gap:8px }
-  .chip{
-    border:1px solid var(--bd); border-radius:999px; padding:.4em .8em; background:transparent; font-weight:700; color:var(--muted);
-  }
+  .chip{ border:1px solid var(--bd); border-radius:999px; padding:.4em .8em; background:transparent; font-weight:700; color:var(--muted) }
   .count{ background: color-mix(in oklab, var(--accent) 20%, transparent); color:#fff; border-color:transparent }
   ol.video-list{ list-style:none; margin:10px 0 0; padding:0; counter-reset:vid }
-  .v{
-    position:relative; border:1px solid var(--bd); border-radius:14px; padding:12px 12px 10px; margin:12px 0;
-    background: color-mix(in oklab, var(--panel-strong) 80%, transparent); display:grid; gap:6px
-  }
-  .v::before{
-    counter-increment:vid; content:counter(vid);
-    position:absolute; inset:-12px auto auto -12px;
-    background:var(--ok); color:#fff; height:28px; min-width:28px; padding:0 8px;
-    border-radius:999px; display:grid; place-items:center; font-weight:900; font-size:.9rem;
-    box-shadow:0 6px 14px color-mix(in oklab, var(--ok) 40%, transparent);
-  }
+  .v{ position:relative; border:1px solid var(--bd); border-radius:14px; padding:12px 12px 10px; margin:12px 0; background: color-mix(in oklab, var(--panel-strong) 80%, transparent); display:grid; gap:6px }
+  .v::before{ counter-increment:vid; content:counter(vid); position:absolute; inset:-12px auto auto -12px; background:var(--ok); color:#fff; height:28px; min-width:28px; padding:0 8px; border-radius:999px; display:grid; place-items:center; font-weight:900; font-size:.9rem; box-shadow:0 6px 14px color-mix(in oklab, var(--ok) 40%, transparent) }
   .v a{ color:var(--accent); font-weight:800; text-decoration:none }
   .meta{ color:var(--muted); font-size:.92rem; display:flex; gap:10px; flex-wrap:wrap }
   .sep::before{ content:'•'; margin:0 .5em; color: color-mix(in oklab, var(--muted) 70%, transparent) }
   .muted{ color:var(--muted) }
-  .kbd{
-    font:600 .85rem/1.1 ui-monospace,SFMono-Regular,Menlo,Consolas,"Noto Sans Mono",monospace;
-    background:#07090d; color:#dbe6ff; padding:.35em .55em; border-radius:.5rem; border:1px solid var(--bd)
-  }
+  .kbd{ font:600 .85rem/1.1 ui-monospace,SFMono-Regular,Menlo,Consolas,"Noto Sans Mono",monospace; background:#07090d; color:#dbe6ff; padding:.35em .55em; border-radius:.5rem; border:1px solid var(--bd) }
   @media (prefers-color-scheme: light){ .kbd{ background:#fafafa; color:#001b4d } }
   .help{ font-size:.92rem }
   .fade-in{ animation: fade .24s ease both }
@@ -166,10 +131,10 @@
   </section>
 </div>
 
-<!-- ★ inline script に nonce を付与（CSP と一致させる） -->
+<!-- inline script に nonce（CSP と一致） -->
 <script nonce="yttool123">
 /* ========= 設定 ========= */
-/** 必ずあなたの GAS WebアプリURL（末尾 /exec）に置き換え */
+/** あなたの GAS WebアプリURL（★末尾 /exec） */
 const API_BASE = 'https://script.google.com/macros/s/AKfycbxOwLPNL5zlcyzChiywKmFNzrtKDgC1JrcUJAs3FB8cG5UlOUoyDi4VvDY-cVuMq9czdg/exec';
 
 /* ========= DOM ========= */
@@ -191,19 +156,41 @@ let lastRows = [];
 let lastChannel = null;
 const MAX_FETCH = 5000;
 
-/* ========= 起動時検査（API_BASE 未設定の早期通知） ========= */
-(function bootCheck(){
+/* ========= URLバリデータ（正規表現→URL解析に変更） ========= */
+function isValidExecURL(s){
+  try{
+    const u = new URL(String(s || '').trim());
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+    // /exec で終わっていればOK（末尾スラッシュやクエリがあっても許可）
+    return /\/exec$/.test(u.pathname);
+  }catch{ return false; }
+}
+
+/* ========= 起動時検査：API_BASEの妥当性 + GASの疎通 ========= */
+(async function bootCheck(){
   const base = (API_BASE||'').trim();
-  if (!/^https?:\/\/.+\/exec(?:[/?].*)?$/.test(base)) {
+  if (!isValidExecURL(base)) {
     statusEl.textContent = 'エラー: API_BASE が未設定か不正です（/exec の完全URLを設定）';
     runBtn.disabled = true;
+    return;
+  }
+  // 疎通チェック（JSONPで /exec?op=health）
+  try{
+    await jsonp('health');
+    statusEl.textContent = ''; // OK
+    runBtn.disabled = false;
+  }catch(e){
+    runBtn.disabled = true;
+    statusEl.textContent =
+      'エラー: GAS に接続できません。デプロイのアクセス権（Anyone）と Script Properties の YT_API_KEY を確認してください。';
+    console.error('health check failed:', e);
   }
 })();
 
-/* ========= JSONPユーティリティ（URL妥当性チェック込み） ========= */
+/* ========= JSONPユーティリティ ========= */
 function jsonp(endpoint, params={}){
   const base = (API_BASE || '').trim();
-  if (!/^https?:\/\/.+\/exec(?:[/?].*)?$/.test(base)) {
+  if (!isValidExecURL(base)) {
     throw new Error('API_BASE が未設定か不正です。GAS のウェブアプリURL（/exec）を設定してください。');
   }
   const cbName = '__jp' + Math.random().toString(36).slice(2);
@@ -258,7 +245,6 @@ inputUrl.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') runBtn.click(
 async function runViaProxy(raw){
   const type = detectInputType(raw);
 
-  // プレイリスト → そのまま全件
   if (type.kind === 'playlist'){
     const ids = await listPlaylistVideoIds_Proxy(type.playlistId, MAX_FETCH);
     const details = await fetchVideosDetails_Proxy(ids);
@@ -266,7 +252,6 @@ async function runViaProxy(raw){
     return { rows, channel: null };
   }
 
-  // チャンネル or 動画 → チャンネルIDへ
   let channelId = null;
   if (type.kind === 'channel') channelId = type.channelId;
   if (type.kind === 'video')   channelId = await getChannelIdFromVideo_Proxy(type.videoId);
