@@ -22,7 +22,7 @@
     /* ====== 配色（ライト優先・高コントラスト） ====== */
     :root{
       --bg:#ffffff; --panel:#ffffff; --text:#111111; --muted:#4a4a4a; --bd:#dcdfe4;
-      --accent:#0b66ff; --accent-2:#094fd1; --ok:#11895a; --warn:#b25a00;
+      --accent:#0b66ff; --accent-2:#094fd1;
       --chip-bg:#ffffff;          /* チップ背景（Light） */
       --chip-fg:#111111;          /* チップ文字色（Light） */
       --link:#0b57d0;             /* 強コントラストリンク（Light） */
@@ -33,7 +33,7 @@
     @media (prefers-color-scheme: dark){
       :root{
         --bg:#111418; --panel:#161a20; --text:#f5f7fa; --muted:#b5bcc6; --bd:#283041;
-        --accent:#5c96ff; --accent-2:#3c78f2; --ok:#1db47a; --warn:#ffb020;
+        --accent:#5c96ff; --accent-2:#3c78f2;
         --chip-bg:#0e1117;         /* チップ背景（Dark） */
         --chip-fg:#e9eef6;         /* チップ文字色（Dark） */
         --link:#8ab4ff;            /* 強コントラストリンク（Dark） */
@@ -53,9 +53,18 @@
 
     header{
       position:sticky; top:0; z-index:10; background:var(--bg);
-      padding:10px 0 8px; border-bottom:1px solid var(--bd);
+      padding:12px 40px 10px 0; border-bottom:1px solid var(--bd);
     }
     header h1{ margin:0; font-size:20px; font-weight:800; letter-spacing:.2px }
+
+    /* 右上の接続先ボタン（BYOエンドポイント切替） */
+    #cfg{
+      position:fixed; right:12px; top:12px; z-index:20;
+      background:var(--chip-bg); color:var(--chip-fg);
+      border:1px solid var(--bd); border-radius:999px;
+      padding:.55em .95em; min-height:48px; display:inline-flex; align-items:center;
+      font-weight:700; cursor:pointer;
+    }
 
     /* ====== UIカード ====== */
     .panel{
@@ -94,8 +103,7 @@
     .chips{ display:flex; gap:8px; flex-wrap:wrap; }
 
     /* チップ（取得件数を含め全て同一トーン） */
-    .chip,
-    .chip.count{
+    .chip, .chip.count{
       background:var(--chip-bg);
       color:var(--chip-fg);
       border:1px solid var(--bd);
@@ -116,8 +124,7 @@
     }
 
     /* 強コントラストのリンク（カード内＆タイトル） */
-    .v a,
-    .ch-title a{
+    .v a, .ch-title a{
       color:var(--link);
       text-decoration:underline;
       text-decoration-thickness:2px;
@@ -125,18 +132,34 @@
       font-weight:800;
       word-break:break-word;
     }
-    .v a:focus-visible,
-    .ch-title a:focus-visible{
+    .v a:focus-visible, .ch-title a:focus-visible{
       outline:2px solid var(--link);
       outline-offset:2px;
       border-radius:6px;
     }
 
+    /* メタ行：ラベルと値を分け、間隔を広めに（読みやすさUP） */
     .meta{
-      margin-top:6px; color:var(--muted); font-size:14px;
-      display:flex; gap:10px; flex-wrap:wrap;
+      margin-top:8px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px 18px;               /* 行内(10px) × 項目間(18px) */
     }
-    .sep::before{ content:'•'; margin:0 .5em; color:color-mix(in oklab, var(--muted) 60%, transparent) }
+    .stat{
+      display:inline-flex;
+      align-items:baseline;
+      gap:6px;                     /* 「ラベル」と「値」の間 */
+      font-size:14px;
+    }
+    .stat .label{
+      color:var(--muted);
+      font-weight:700;
+      letter-spacing:.02em;
+    }
+    .stat .value{
+      font-variant-numeric: tabular-nums;
+      color:var(--text);
+    }
 
     /* アクセシビリティ（スクリーンリーダー専用） */
     .sr{
@@ -144,7 +167,7 @@
       overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
     }
 
-    /* === 「取得」ボタンの縦書き防止（横書き固定 & 1行固定） === */
+    /* 「取得」縦書き防止（横書き固定 & 1行固定） */
     #run, .btn, button{
       writing-mode:horizontal-tb !important;
       text-orientation:mixed !important;
@@ -159,47 +182,12 @@
       text-orientation:mixed !important;
       white-space:nowrap;
     }
-    /* ===== メタ情報（再生回数・高評価・コメント・日付）の視認性UP ===== */
-.meta{
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-  margin-top:8px;
-}
-
-/* ピル型バッジ：全トーン統一で読みやすく */
-.mb{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  padding:8px 12px;
-  border:1px solid var(--bd);
-  border-radius:999px;
-  background: color-mix(in oklab, var(--panel) 78%, var(--bg));
-  font-weight:800;
-  font-size:15px;              /* モバイルでも読みやすい */
-  line-height:1;
-}
-
-/* アイコン（絵文字）のサイズを統一 */
-.mb .i{
-  font-size:16px;
-  line-height:1;
-}
-
-/* 数字の桁が揃って読みやすい（例：1,234 と 12,345） */
-.mb .num{
-  font-variant-numeric: tabular-nums;
-  letter-spacing:.01em;
-}
-
-/* 旧デザインの区切りドットは不要に */
-.sep{ display:none !important; }
-
   </style>
 </head>
 
 <body>
+  <button id="cfg" type="button">⚙︎ 接続先</button>
+
   <div class="wrap">
     <header>
       <h1>YouTubeじょうほう一括取得</h1>
@@ -257,9 +245,10 @@
     <section class="panel" aria-labelledby="help-title">
       <h2 id="help-title" class="sr">使い方</h2>
       <ul style="margin:0; padding-left:18px; color:var(--muted); font-size:14px">
-        <li>動画URLを貼った場合は、その<strong>チャンネル全動画</strong>を取得するよぉ</li
-        <li>お試し版なので1日1万リクエストあったら停止するよぉ</li>
-
+        <li>動画URLを貼ると、その<strong>動画のチャンネル全動画</strong>を取得します。</li>
+        <li>プレイリストURL/IDは、その<strong>プレイリスト内の全動画</strong>を取得します（統計は非表示）。</li>
+        <li>APIキーはサーバー側に保管され、ブラウザへは表示されません。</li>
+        <li>右上の「⚙︎ 接続先」から<strong>自分のGAS /exec</strong>に切替できます（無料で使いたい方向け）。</li>
       </ul>
     </section>
   </div>
@@ -275,8 +264,18 @@
 
   <!-- アプリ本体（nonce一致） -->
   <script nonce="yttool123">
-  /* ========= 設定 ========= */
-  const API_BASE = 'https://script.google.com/macros/s/AKfycbxOwLPNL5zlcyzChiywKmFNzrtKDgC1JrcUJAs3FB8cG5UlOUoyDi4VvDY-cVuMq9czdg/exec';
+  /* ========= 接続先設定（BYO対応） ========= */
+  const API_BASE_DEFAULT = 'https://script.google.com/macros/s/AKfycbxOwLPNL5zlcyzChiywKmFNzrtKDgC1JrcUJAs3FB8cG5UlOUoyDi4VvDY-cVuMq9czdg/exec';
+  let API_BASE = localStorage.getItem('yt_api_base') || API_BASE_DEFAULT;
+
+  document.getElementById('cfg').onclick = () => {
+    const cur = localStorage.getItem('yt_api_base') || API_BASE_DEFAULT;
+    const v = prompt('自分の GAS Webアプリ（/exec）URL を貼ってください', cur);
+    if (!v) return;
+    if (!/https?:\/\/.+\/exec$/.test(v)) { alert('末尾が /exec の完全URLを入力してください'); return; }
+    localStorage.setItem('yt_api_base', v);
+    location.reload();
+  };
 
   /* ========= DOM ========= */
   const inputUrl = document.getElementById('inputUrl');
@@ -293,7 +292,7 @@
   const listEl   = document.getElementById('list');
 
   /* ========= 状態 ========= */
-  let baseRows = [];
+  let baseRows = [];      // 取得した生データ（以後の並び替えはここからローカルで）
   let lastChannel = null;
   const MAX_FETCH = 5000;
 
@@ -327,9 +326,21 @@
 
   /* ========= 起動時ヘルスチェック ========= */
   (async function bootCheck(){
-    if (!isValidExecURL(API_BASE)) { statusEl.textContent='エラー: API_BASE が未設定か不正です'; runBtn.disabled=true; return; }
-    try{ await jsonp('health'); runBtn.disabled=false; statusEl.textContent=''; }
-    catch(e){ runBtn.disabled=true; statusEl.textContent='エラー: GAS に接続できません（デプロイと YT_API_KEY を確認）'; console.error(e); }
+    try{
+      await jsonp('health');
+      runBtn.disabled=false; statusEl.textContent='';
+      const cur = localStorage.getItem('yt_api_base');
+      if (cur && cur !== API_BASE_DEFAULT) {
+        // 接続先の短い表示（安全のためドメインだけ）
+        const host = new URL(cur).host;
+        statusEl.textContent = `接続先: ${host}`;
+        setTimeout(()=>statusEl.textContent='', 2000);
+      }
+    }catch(e){
+      runBtn.disabled=true;
+      statusEl.textContent='エラー: GAS に接続できません（デプロイと YT_API_KEY を確認 / 接続先⚙︎を見直し）';
+      console.error(e);
+    }
   })();
 
   /* ========= UI ハンドラ ========= */
@@ -380,6 +391,12 @@
     if (type.kind==='channel') channelId=type.channelId;
     if (type.kind==='video')   channelId=await getChannelIdFromVideo(type.videoId);
     if (type.kind==='channelQuery') channelId=await searchChannelId(type.q);
+
+    // 最後の救済（生文字列でチャンネル検索）
+    if (!channelId && raw){
+      const q = raw.replace(/^@/,'').trim();
+      channelId = await searchChannelId(q);
+    }
     if (!channelId) throw new Error('チャンネルIDを解決できませんでした');
 
     try{
@@ -404,56 +421,30 @@
     }
   }
 
-  /* ========= 入力タイプ検出（強化版） ========= */
+  /* ========= 入力タイプ検出 ========= */
   function detectInputType(raw){
-    const s = String(raw || '').trim();
-    if (!s) return { kind:'unknown' };
-
-    // 1) 生の UCID / VideoID / Handle 直入力
-    if (/^UC[0-9A-Za-z_-]{22}$/.test(s)) return { kind:'channel', channelId:s };
-    if (/^[0-9A-Za-z_-]{11}$/.test(s))   return { kind:'video',   videoId:s   };
-    if (s.startsWith('@'))               return { kind:'channelQuery', q:s.slice(1) };
-
-    // 2) URL の場合を幅広く吸収
-    if (/^https?:\/\//i.test(s)){
+    const s=String(raw||'').trim(); if(!s) return {kind:'unknown'};
+    if(/^UC[0-9A-Za-z_-]{22}$/.test(s)) return {kind:'channel',channelId:s};
+    if(s.startsWith('@')) return {kind:'channelQuery',q:s.slice(1)};
+    if(/^https?:\/\//i.test(s)){
       try{
-        const u = new URL(s);
-        const host = u.hostname.replace(/^(www\.|m\.)/,''); // www./m. を統一
-        const parts = u.pathname.replace(/\/+$/,'').split('/').filter(Boolean);
-        const list  = u.searchParams.get('list');
-
-        // youtu.be 短縮
-        if (host === 'youtu.be' && parts[0]) {
-          return { kind:'video', videoId: parts[0].slice(0,11) };
-        }
-
-        // YouTube ドメイン群
-        if (/(^|\.)youtube\.com$/.test(host) || host === 'music.youtube.com'){
-          // /watch?v=xxx | /shorts/xxx | /embed/xxx | /live/xxx
-          const vid = u.searchParams.get('v')
-            || (['shorts','embed','live'].includes(parts[0]) ? parts[1] : null);
-          if (vid) return { kind:'video', videoId: vid.slice(0,11) };
-
-          // playlist ?list=...
-          if (list) return { kind:'playlist', playlistId:list };
-
-          // /channel/UCxxxx
-          const mCh = u.pathname.match(/\/channel\/(UC[0-9A-Za-z_-]{22})(?:[\/?#]|$)/);
-          if (mCh) return { kind:'channel', channelId:mCh[1] };
-
-          // /@handle, /@handle/xxx（/videos /streams /shorts など）
-          const mHandle = u.pathname.match(/\/@([^\/?#]+)/);
-          if (mHandle) return { kind:'channelQuery', q:mHandle[1] };
-
-          // /c/xxxx /user/xxxx（旧URL系は検索に委譲）
-          const mCustom = u.pathname.match(/\/(?:c|user)\/([^\/?#]+)/);
-          if (mCustom) return { kind:'channelQuery', q:mCustom[1] };
-        }
-      }catch{/* 検索へフォールバック */}
+        const u=new URL(s); const host=u.hostname.replace(/^www\./,'');
+        const parts=u.pathname.replace(/\/+$/,'').split('/').filter(Boolean);
+        const vid=u.searchParams.get('v')||(['shorts','embed','live'].includes(parts[0])?parts[1]:null);
+        const list=u.searchParams.get('list');
+        if(host==='youtu.be'&&parts[0]) return {kind:'video',videoId:parts[0].slice(0,11)};
+        if(vid) return {kind:'video',videoId:vid.slice(0,11)};
+        if(list) return {kind:'playlist',playlistId:list};
+        const mCh=u.pathname.match(/\/channel\/(UC[0-9A-Za-z_-]{22})$/);
+        if(mCh) return {kind:'channel',channelId:mCh[1]};
+        const mHandle=u.pathname.match(/\/@([^/]+)$/);
+        if(mHandle) return {kind:'channelQuery',q:mHandle[1]};
+        const mCustom=u.pathname.match(/\/(c|user)\/([^/]+)$/);
+        if(mCustom) return {kind:'channelQuery',q:mCustom[2]};
+      }catch{}
     }
-
-    // 3) どれにも当たらなければ検索へ
-    return { kind:'channelQuery', q:s.replace(/^@/,'') };
+    if(/^[0-9A-Za-z_-]{11}$/.test(s)) return {kind:'video',videoId:s};
+    return {kind:'channelQuery',q:s};
   }
 
   /* ========= 行変換（高速API） ========= */
@@ -541,18 +532,33 @@
     const frag=document.createDocumentFragment();
     rows.forEach((r)=>{
       const li=document.createElement('li'); li.className='v';
-      const a=document.createElement('a'); a.href=r.url; a.target='_blank'; a.rel='noopener noreferrer'; a.textContent=r.title||'(no title)'; li.appendChild(a);
+
+      const a=document.createElement('a');
+      a.href=r.url; a.target='_blank'; a.rel='noopener noreferrer';
+      a.textContent=r.title||'(no title)';
+      li.appendChild(a);
+
+      // メタ情報（ラベルと値を分けて読みやすく）
       const meta=document.createElement('div'); meta.className='meta';
-      meta.innerHTML=[
-        `${fmtNum(r.viewCount)}回 再生`,
-        (r.likeCount==null?'-':`${fmtNum(r.likeCount)} 高評価`),
-        (r.commentCount==null?'-':`${fmtNum(r.commentCount)} コメント`),
-        (r.publishedAt?new Date(r.publishedAt).toLocaleDateString('ja-JP'):'-')
-      ].map((t,idx)=> idx===0?t:`<span class="sep"></span>${t}`).join('');
-      li.appendChild(meta); frag.appendChild(li);
+
+      meta.appendChild(makeStat('再生', r.viewCount==null?'-':`${fmtNum(r.viewCount)}回`));
+      meta.appendChild(makeStat('高評価', r.likeCount==null?'-':fmtNum(r.likeCount)));
+      meta.appendChild(makeStat('コメント', r.commentCount==null?'-':fmtNum(r.commentCount)));
+      meta.appendChild(makeStat('日付', r.publishedAt?new Date(r.publishedAt).toLocaleDateString('ja-JP'):'-'));
+
+      li.appendChild(meta);
+      frag.appendChild(li);
     });
     listEl.appendChild(frag);
   }
+  function makeStat(label, value){
+    const wrap=document.createElement('span'); wrap.className='stat';
+    const k=document.createElement('span'); k.className='label'; k.textContent=label;
+    const v=document.createElement('span'); v.className='value'; v.textContent=value;
+    wrap.appendChild(k); wrap.appendChild(v);
+    return wrap;
+  }
+
   function setChannel(ch,got=0){
     if(!ch){ chPanel.style.display='none'; chipGot.textContent='取得件数：0'; return; }
     chPanel.style.display=''; chTitle.innerHTML=`<a href="${ch.url}" target="_blank" rel="noopener noreferrer">${esc(ch.title||'')}</a>`;
