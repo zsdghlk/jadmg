@@ -2,14 +2,13 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-<!-- CSP: インラインJSは nonce だけ許可。外部は self と script.google.com のみ -->
+<!-- CSP: インラインJSは nonce のみ許可。外部は self / Apps Script ドメインを許可 -->
 <meta http-equiv="Content-Security-Policy"
       content="default-src 'self';
                script-src 'self' https://script.google.com https://script.googleusercontent.com 'nonce-yttool123';
                connect-src 'self' https://script.google.com https://script.googleusercontent.com;
                img-src 'self' data:;
                style-src 'self' 'unsafe-inline'">
-
 
 <title>YouTube 全件取得 — 見やすいテキスト出力（安全プロキシ版）</title>
 <style>
@@ -74,12 +73,12 @@
   <section class="panel fade-in">
     <div class="grid cols-2">
       <div>
-        <label>URL（チャンネル / 動画 / プレイリスト / @ハンドル / UCID）</label>
+        <label for="inputUrl">URL（チャンネル / 動画 / プレイリスト / @ハンドル / UCID）</label>
         <input id="inputUrl" placeholder="例）https://www.youtube.com/@Google | https://youtu.be/XXXXXXXXXXX | https://www.youtube.com/playlist?list=PL..." />
       </div>
       <div>
-        <label>並び替え</label>
-        <select id="postSort">
+        <label for="postSort">並び替え</label>
+        <select id="postSort" aria-label="並び替え">
           <option value="none" selected>取得順のまま</option>
           <option value="viewsDesc">視聴回数 多い順</option>
           <option value="viewsAsc">視聴回数 少ない順</option>
@@ -95,7 +94,7 @@
       </div>
     </div>
     <div class="row" style="margin-top:10px">
-      <button id="run" class="btn" style="flex:1">取得</button>
+      <button id="run" class="btn" style="flex:1" aria-busy="false">取得</button>
       <div id="status" class="status" style="flex:2 1 200px" aria-live="polite"></div>
     </div>
   </section>
@@ -132,10 +131,10 @@
   </section>
 </div>
 
-<!-- inline script に nonce（CSP と一致） -->
+<!-- inline script: CSP の nonce と一致させる -->
 <script nonce="yttool123">
 /* ========= 設定 ========= */
-/** あなたの GAS WebアプリURL（★末尾 /exec） */
+/** ★あなたの GAS WebアプリURL（末尾 /exec） */
 const API_BASE = 'https://script.google.com/macros/s/AKfycbxOwLPNL5zlcyzChiywKmFNzrtKDgC1JrcUJAs3FB8cG5UlOUoyDi4VvDY-cVuMq9czdg/exec';
 
 /* ========= DOM ========= */
@@ -157,17 +156,16 @@ let lastRows = [];
 let lastChannel = null;
 const MAX_FETCH = 5000;
 
-/* ========= URLバリデータ（正規表現→URL解析に変更） ========= */
+/* ========= URL検証 ========= */
 function isValidExecURL(s){
   try{
-    const u = new URL(String(s || '').trim());
-    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
-    // /exec で終わっていればOK（末尾スラッシュやクエリがあっても許可）
+    const u = new URL(String(s||'').trim());
+    if (!/^https?:$/.test(u.protocol)) return false;
     return /\/exec$/.test(u.pathname);
   }catch{ return false; }
 }
 
-/* ========= 起動時検査：API_BASEの妥当性 + GASの疎通 ========= */
+/* ========= 起動時ヘルスチェック ========= */
 (async function bootCheck(){
   const base = (API_BASE||'').trim();
   if (!isValidExecURL(base)) {
@@ -175,10 +173,9 @@ function isValidExecURL(s){
     runBtn.disabled = true;
     return;
   }
-  // 疎通チェック（JSONPで /exec?op=health）
   try{
     await jsonp('health');
-    statusEl.textContent = ''; // OK
+    statusEl.textContent = '';
     runBtn.disabled = false;
   }catch(e){
     runBtn.disabled = true;
@@ -190,23 +187,22 @@ function isValidExecURL(s){
 
 /* ========= JSONPユーティリティ ========= */
 function jsonp(endpoint, params={}){
-  const base = (API_BASE || '').trim();
-  if (!isValidExecURL(base)) {
-    throw new Error('API_BASE が未設定か不正です。GAS のウェブアプリURL（/exec）を設定してください。');
-  }
+  const base = (API_BASE||'').trim();
+  if (!isValidExecURL(base)) throw new Error('API_BASE が未設定か不正です。/exec のURLを設定してください。');
+
   const cbName = '__jp' + Math.random().toString(36).slice(2);
   return new Promise((resolve, reject)=>{
-    const scr = document.createElement('script');
     let u;
-    try{ u = new URL(base); }catch(e){ reject(new Error('API_BASE の URL 形式が不正です')); return; }
+    try { u = new URL(base); } catch { reject(new Error('API_BASE の URL 形式が不正です')); return; }
     u.searchParams.set('op', endpoint);
-    for (const [k,v] of Object.entries(params)) if (v!=null) u.searchParams.set(k, String(v));
+    for (const [k,v] of Object.entries(params)) if (v!=null && v!=='') u.searchParams.set(k, String(v));
     u.searchParams.set('callback', cbName);
 
+    const scr = document.createElement('script');
     const timer = setTimeout(()=>{ cleanup(); reject(new Error('JSONP timeout')); }, 30000);
     function cleanup(){ clearTimeout(timer); try{ delete window[cbName]; }catch{} scr.remove(); }
 
-    window[cbName] = (data)=>{ cleanup(); if (data && data.error) reject(new Error(data.error)); else resolve(data); };
+    window[cbName] = (data)=>{ cleanup(); data && data.error ? reject(new Error(data.error)) : resolve(data); };
     scr.onerror = ()=>{ cleanup(); reject(new Error('JSONP network error')); };
     scr.referrerPolicy = 'no-referrer';
     scr.async = true;
@@ -215,7 +211,7 @@ function jsonp(endpoint, params={}){
   });
 }
 
-/* ========= UIハンドラ ========= */
+/* ========= UI ========= */
 runBtn.onclick = async () => {
   const raw = inputUrl.value.trim();
   if (!raw) return alert('URL を入力してください');
@@ -242,10 +238,11 @@ runBtn.onclick = async () => {
 /* Enterで実行 */
 inputUrl.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') runBtn.click(); });
 
-/* ========= プロキシ経由の処理 ========= */
+/* ========= コア処理 ========= */
 async function runViaProxy(raw){
   const type = detectInputType(raw);
 
+  // プレイリスト → 全件
   if (type.kind === 'playlist'){
     const ids = await listPlaylistVideoIds_Proxy(type.playlistId, MAX_FETCH);
     const details = await fetchVideosDetails_Proxy(ids);
@@ -253,6 +250,7 @@ async function runViaProxy(raw){
     return { rows, channel: null };
   }
 
+  // チャンネル or 動画 → チャンネルIDへ
   let channelId = null;
   if (type.kind === 'channel') channelId = type.channelId;
   if (type.kind === 'video')   channelId = await getChannelIdFromVideo_Proxy(type.videoId);
@@ -271,7 +269,7 @@ async function runViaProxy(raw){
   return { rows, channel };
 }
 
-/* ========= 入力タイプ検出 ========= */
+/* 入力タイプ検出 */
 function detectInputType(raw){
   const s = String(raw||'').trim();
   if (!s) return { kind:'unknown' };
@@ -299,7 +297,7 @@ function detectInputType(raw){
   return { kind:'channelQuery', q:s };
 }
 
-/* ========= プロキシAPI呼び出し ========= */
+/* ========= プロキシAPI ========= */
 async function fetchChannelInfo_Proxy(channelId){
   const r = await jsonp('channelInfo', { id: channelId });
   const d = r?.data; if (!d) return null;
@@ -325,25 +323,38 @@ async function listPlaylistVideoIds_Proxy(playlistId, maxCount){
   }
   return ids.slice(0, Math.min(maxCount, MAX_FETCH));
 }
-async function fetchVideosDetails_Proxy(videoIds){
+
+/* ★ 高速化：videos の JSONP を並列（上限4本）で取得 */
+async function fetchVideosDetails_Proxy(videoIds, concurrency=4){
   const map = new Map();
-  for (let i=0;i<videoIds.length;i+=50){
-    const chunk = videoIds.slice(i,i+50).join(',');
-    busy(true, `詳細取得中… ${Math.min(i+50, videoIds.length)}/${videoIds.length}`);
-    const r = await jsonp('videos', { ids: chunk });
-    for (const it of (r?.items||[])){
-      const st = it.statistics||{}, sn = it.snippet||{};
-      map.set(it.id, {
-        title: sn.title ?? '',
-        viewCount: st.viewCount!=null? Number(st.viewCount):null,
-        likeCount: st.likeCount!=null? Number(st.likeCount):null,
-        commentCount: st.commentCount!=null? Number(st.commentCount):null,
-        publishedAt: sn.publishedAt ?? ''
-      });
+  const chunks = [];
+  for (let i=0;i<videoIds.length;i+=50) chunks.push(videoIds.slice(i,i+50));
+
+  let cursor = 0;
+  async function worker(){
+    while (true){
+      const my = cursor++;
+      if (my >= chunks.length) break;
+      const ids = chunks[my].join(',');
+      busy(true, `詳細取得中… ${Math.min((my+1)*50, videoIds.length)}/${videoIds.length}`);
+      const r = await jsonp('videos', { ids });
+      for (const it of (r?.items||[])){
+        const st = it.statistics||{}, sn = it.snippet||{};
+        map.set(it.id, {
+          title: sn.title ?? '',
+          viewCount: st.viewCount!=null? Number(st.viewCount):null,
+          likeCount: st.likeCount!=null? Number(st.likeCount):null,
+          commentCount: st.commentCount!=null? Number(st.commentCount):null,
+          publishedAt: sn.publishedAt ?? ''
+        });
+      }
     }
   }
+  const workers = Array.from({length: Math.min(concurrency, chunks.length)}, worker);
+  await Promise.all(workers);
   return map;
 }
+
 async function searchChannelIdByQuery_Proxy(query){
   const r = await jsonp('searchChannel', { q: query });
   return r?.channelId || null;
@@ -442,7 +453,11 @@ function toRowFromDetail(d, id, i){
     __idx: i
   };
 }
-function busy(b, msg){ runBtn.disabled = b; statusEl.textContent = b ? (msg || '取得中…') : ''; }
+function busy(b, msg){
+  runBtn.disabled = b;
+  runBtn.setAttribute('aria-busy', b ? 'true' : 'false');
+  statusEl.textContent = b ? (msg || '取得中…') : '';
+}
 function toast(msg){ statusEl.textContent = msg; setTimeout(()=> statusEl.textContent = '', 1600); }
 function fmtNum(n){ return (n==null || isNaN(n)) ? '-' : Number(n).toLocaleString('ja-JP'); }
 function esc(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
