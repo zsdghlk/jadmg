@@ -219,14 +219,24 @@
     </section>
 
     <!-- ヘルプ -->
-    <section class="panel" aria-label="ヒント">
-      <ul style="margin:0; padding-left:18px; color:var(--muted)">
-        <li>動画URL → 所属チャンネルの<strong>全動画</strong>を取得。</li>
-        <li>プレイリストURL/ID → その<strong>プレイリストの全動画</strong>を取得（チャンネル統計は非表示）。</li>
-        <li>上限は最大 5,000 本（APIクォータに注意）。</li>
-        <li>APIキーはサーバーのスクリプトプロパティに保管（フロントへ露出しません）。</li>
-      </ul>
-    </section>
+  <!-- ヘルプ（簡単な取り扱い説明） -->
+<section class="panel" aria-label="使い方">
+  <h2 style="margin:0 0 8px;font-size:1rem;line-height:1.2">使い方（3ステップ）</h2>
+  <ol style="margin:0;padding-left:20px">
+    <li>取得したい <strong>URL を1つ</strong>貼り付け（@ハンドル / UCID / チャンネルURL / 動画URL / プレイリストURL すべてOK）。</li>
+    <li><strong>「取得」</strong>ボタンをタップ。</li>
+    <li><strong>並び替え</strong>で表示順（視聴回数 / 高評価 / コメント / 公開日 など）を選ぶ。</li>
+  </ol>
+
+  <div style="margin-top:10px; color:#4a5565">
+    <ul style="margin:0; padding-left:18px">
+      <li>動画URLを入れると、<strong>その動画のチャンネルの全動画</strong>を取得します。</li>
+      <li>プレイリストURL/IDを入れると、<strong>そのプレイリスト内の動画</strong>を取得します。</li>
+      <li>うまく出ない時は、URLの形式を確認して再度お試しください。</li>
+    </ul>
+  </div>
+</section>
+
   </div>
 
   <!-- inline script: CSP の nonce と一致させる -->
