@@ -152,7 +152,8 @@ const chipGot  = document.getElementById('chipGot');
 const listEl   = document.getElementById('list');
 
 /* ========= 状態 ========= */
-let lastRows = [];
+let baseRows = [];     // ★取得した生データ（以後の並び替えはここからローカルで行う）
+let lastRows = [];     // 直近表示中のデータ
 let lastChannel = null;
 const MAX_FETCH = 5000;
 
@@ -211,7 +212,7 @@ function jsonp(endpoint, params={}){
   });
 }
 
-/* ========= UI ========= */
+/* ========= UI: 取得ボタン ========= */
 runBtn.onclick = async () => {
   const raw = inputUrl.value.trim();
   if (!raw) return alert('URL を入力してください');
@@ -220,11 +221,16 @@ runBtn.onclick = async () => {
     setChannel(null);
     renderRows([]);
 
+    // ネットワーク取得（★ここだけがAPIアクセス）
     const {rows, channel} = await runViaProxy(raw);
 
-    const sorted = sortAfter(rows, postSort.value);
-    lastRows = sorted; lastChannel = channel;
-    setChannel(channel, sorted.length);
+    // ★生データを保持し、表示用は並び替え結果を描画
+    baseRows   = rows;
+    lastChannel= channel;
+
+    const sorted = sortAfter([...baseRows], postSort.value);
+    lastRows = sorted;
+    setChannel(lastChannel, sorted.length);
     renderRows(sorted);
     toast(`${sorted.length} 件 取得しました`);
   }catch(err){
@@ -234,6 +240,16 @@ runBtn.onclick = async () => {
     alert('エラー: ' + (err?.message || err));
   }finally{ busy(false); }
 };
+
+/* ========= UI: 並び替え変更時（★再取得なし・ローカルで即反映） ========= */
+postSort.addEventListener('change', () => {
+  if (!baseRows.length) return;
+  const rows = sortAfter([...baseRows], postSort.value);
+  lastRows = rows;
+  renderRows(rows);
+  if (lastChannel) setChannel(lastChannel, rows.length); // 件数バッジ維持
+  toast('ローカルで並び替えました（再取得なし）');
+});
 
 /* Enterで実行 */
 inputUrl.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') runBtn.click(); });
