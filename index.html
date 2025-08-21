@@ -159,6 +159,43 @@
       text-orientation:mixed !important;
       white-space:nowrap;
     }
+    /* ===== メタ情報（再生回数・高評価・コメント・日付）の視認性UP ===== */
+.meta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:8px;
+}
+
+/* ピル型バッジ：全トーン統一で読みやすく */
+.mb{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 12px;
+  border:1px solid var(--bd);
+  border-radius:999px;
+  background: color-mix(in oklab, var(--panel) 78%, var(--bg));
+  font-weight:800;
+  font-size:15px;              /* モバイルでも読みやすい */
+  line-height:1;
+}
+
+/* アイコン（絵文字）のサイズを統一 */
+.mb .i{
+  font-size:16px;
+  line-height:1;
+}
+
+/* 数字の桁が揃って読みやすい（例：1,234 と 12,345） */
+.mb .num{
+  font-variant-numeric: tabular-nums;
+  letter-spacing:.01em;
+}
+
+/* 旧デザインの区切りドットは不要に */
+.sep{ display:none !important; }
+
   </style>
 </head>
 
