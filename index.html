@@ -2,12 +2,6 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-<!-- ★ 先読み最適化（初回接続を短縮） -->
-<link rel="preconnect" href="https://script.google.com" crossorigin>
-<link rel="dns-prefetch" href="https://script.google.com">
-<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
-<link rel="dns-prefetch" href="https://script.googleusercontent.com">
-
 <!-- CSP: インラインJSは nonce のみ許可。外部は self / Apps Script ドメインを許可 -->
 <meta http-equiv="Content-Security-Policy"
       content="default-src 'self';
@@ -48,7 +42,6 @@
   .btn{ background:linear-gradient(180deg, var(--accent), var(--accent-2)); color:#fff; border:none; cursor:pointer; font-weight:800; box-shadow:0 6px 18px color-mix(in oklab, var(--accent-2) 35%, transparent); transition: transform .06s ease, filter .15s ease }
   .btn:active{ transform: translateY(1px) scale(.998) }
   .btn:hover{ filter: brightness(1.03) }
-  .btn-secondary{ background:#0d0f14; border:1px solid var(--bd); color:var(--text); font-weight:800; cursor:pointer }
   .status{ color:var(--muted); min-height:1.2em }
   .statbar{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; padding:12px; border-radius:14px; border:1px dashed var(--bd); background: color-mix(in oklab, var(--panel-strong) 70%, transparent) }
   .ch-title{ font-weight:900; font-size:clamp(16px,3.8vw,20px); display:flex; align-items:center; gap:10px }
@@ -101,10 +94,6 @@
     </div>
     <div class="row" style="margin-top:10px">
       <button id="run" class="btn" style="flex:1" aria-busy="false">取得</button>
-      <div style="display:flex; gap:8px">
-        <button id="btnCsv" class="btn-secondary" disabled>CSV</button>
-        <button id="btnJson" class="btn-secondary" disabled>JSON</button>
-      </div>
       <div id="status" class="status" style="flex:2 1 200px" aria-live="polite"></div>
     </div>
   </section>
@@ -149,8 +138,6 @@ const inputUrl = document.getElementById('inputUrl');
 const postSort = document.getElementById('postSort');
 const runBtn   = document.getElementById('run');
 const statusEl = document.getElementById('status');
-const btnCsv   = document.getElementById('btnCsv');
-const btnJson  = document.getElementById('btnJson');
 
 const chPanel  = document.getElementById('chPanel');
 const chTitle  = document.getElementById('chTitle');
@@ -161,16 +148,17 @@ const chipGot  = document.getElementById('chipGot');
 const listEl   = document.getElementById('list');
 
 /* ========== 状態 ========== */
-let baseRows = [];      // 取得した生データ（並び替えはこの配列からローカルで）
+let baseRows = [];      // 取得した生データ（以後の並び替えはローカルで）
 let lastChannel = null;
-let currentReqId = 0;   // ★連打時のレース防止
 const MAX_FETCH = 5000;
+let taskSeq = 0;        // 連打時の競合防止
 
 /* ========== ユーティリティ ========== */
 function isValidExecURL(s){
   try{ const u = new URL(String(s||'').trim()); return /^https?:$/.test(u.protocol) && /\/exec$/.test(u.pathname); }
   catch{ return false; }
 }
+
 function jsonp(endpoint, params={}){
   const base = (API_BASE||'').trim();
   if (!isValidExecURL(base)) throw new Error('API_BASE が未設定か不正です（/exec の完全URLを設定）');
@@ -190,44 +178,9 @@ function jsonp(endpoint, params={}){
   });
 }
 function busy(b,msg){ runBtn.disabled=b; runBtn.setAttribute('aria-busy', b?'true':'false'); statusEl.textContent=b?(msg||'取得中…'):''; }
-function toast(msg){ statusEl.textContent=msg; setTimeout(()=> statusEl.textContent='',1800); }
+function toast(msg){ statusEl.textContent=msg; setTimeout(()=> statusEl.textContent='',1600); }
 function fmtNum(n){ return (n==null||isNaN(n))?'-':Number(n).toLocaleString('ja-JP'); }
 function esc(s){ return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-function nowIso(){ return new Date().toISOString(); }
-
-/* ====== 並列数を回線品質で最適化（フォールバック付き） ====== */
-function chooseConcurrency(){
-  const dl = (navigator.connection && typeof navigator.connection.downlink === 'number') ? navigator.connection.downlink : null;
-  if (dl == null) return 6;
-  if (dl >= 10) return 10;
-  if (dl >= 5)  return 8;
-  if (dl >= 2)  return 6;
-  return 4;
-}
-
-/* ====== ローカルキャッシュ（即描画→裏で更新） ====== */
-const LS_PREFIX = 'yttool:';
-function cacheKeyForType(type){
-  if (type.kind==='playlist') return LS_PREFIX+'pl:'+type.playlistId;
-  if (type.kind==='channel')  return LS_PREFIX+'ch:'+type.channelId;
-  return null; // video/handle は即解決できないので未対応（後段で通常取得）
-}
-function cacheSave(key, payload){
-  try{ localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), payload })); }catch{}
-}
-function cacheLoad(key, maxAgeMs){
-  try{
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    const { savedAt, payload } = JSON.parse(raw);
-    if (!savedAt || Date.now()-savedAt > maxAgeMs) return null;
-    return payload;
-  }catch{ return null; }
-}
-function latestPublished(rows){
-  let t=0; for(const r of rows){ const d=new Date(r.publishedAt||0).getTime(); if (isFinite(d) && d>t) t=d; }
-  return t;
-}
 
 /* ========== 起動時ヘルスチェック ========== */
 (async function bootCheck(){
@@ -238,113 +191,69 @@ function latestPublished(rows){
 
 /* ========== UI ハンドラ ========== */
 runBtn.onclick = async () => {
+  const mySeq = ++taskSeq;           // このクリックのシーケンス番号
   const raw = inputUrl.value.trim();
   if (!raw) return alert('URL を入力してください');
-
-  const reqId = ++currentReqId;
-  const type = detectInputType(raw);
-
-  // 1) 可能ならキャッシュを即表示（チャンネル/プレイリストのみ）
-  const ck = cacheKeyForType(type);
-  if (ck){
-    const cached = cacheLoad(ck, /*maxAge*/ 1000*60*60*24*7); // 7日まで許容（後で最新化）
-    if (cached && currentReqId===reqId){
-      baseRows = cached.rows||[];
-      lastChannel = cached.channel||null;
-      const sorted = sortAfter([...baseRows], postSort.value);
-      setChannel(lastChannel, sorted.length);
-      renderRows(sorted, /*chunked*/ true);
-      enableExports(true);
-      toast('キャッシュから仮表示 → 最新データを確認中…');
-    }
-  }
-
-  // 2) ネットワークで最新取得（高速API→失敗時フォールバック）
   try{
-    if (currentReqId!==reqId) return; // キャンセル
-    busy(true, '解析中…'); if (!ck) { setChannel(null); renderRows([], false); }
+    busy(true, '解析中…'); if (mySeq!==taskSeq) return;
+    setChannel(null); if (mySeq!==taskSeq) return;
+    renderRows([]);  if (mySeq!==taskSeq) return;
 
-    const {rows, channel, stableKey} = await runViaProxy(raw, type);
-    if (currentReqId!==reqId) return;
+    const {rows, channel} = await runViaProxy(raw);
+    if (mySeq!==taskSeq) return;    // 途中で新リクエストが来たら破棄
 
     baseRows   = rows;
     lastChannel= channel;
 
     const sorted = sortAfter([...baseRows], postSort.value);
-    setChannel(lastChannel, sorted.length);
-    renderRows(sorted, /*chunked*/ true);
-    enableExports(true);
-    toast(`${sorted.length} 件 取得しました`);
+    if (mySeq!==taskSeq) return;
 
-    // 3) キャッシュ保存（キーが確定できたとき）
-    const saveKey = ck || (stableKey ? (stableKey.kind==='channel'? LS_PREFIX+'ch:'+stableKey.id : stableKey.kind==='playlist'? LS_PREFIX+'pl:'+stableKey.id : null) : null);
-    if (saveKey){
-      cacheSave(saveKey, { rows: baseRows, channel: lastChannel, sortKey: postSort.value, latest: latestPublished(baseRows) });
-    }
+    setChannel(channel, sorted.length);
+    renderRows(sorted);
+    toast(`${sorted.length} 件 取得しました`);
   }catch(err){
-    if (currentReqId!==reqId) return;
-    console.error(err); setChannel(null); renderRows([], false); enableExports(false);
-    alert('エラー: '+(err?.message||err));
+    if (mySeq!==taskSeq) return;
+    console.error(err); setChannel(null); renderRows([]); alert('エラー: '+(err?.message||err));
   }finally{
-    if (currentReqId===reqId) busy(false);
+    if (mySeq===taskSeq) busy(false);
   }
 };
 
 postSort.addEventListener('change', () => {
   if (!baseRows.length) return;
   const rows = sortAfter([...baseRows], postSort.value);
-  renderRows(rows, /*chunked*/ false); // 並び替えは即時
+  renderRows(rows);
   if (lastChannel) setChannel(lastChannel, rows.length);
-  try{ localStorage.setItem(LS_PREFIX+'sortKey', postSort.value); }catch{}
   toast('ローカルで並び替えました（再取得なし）');
 });
 
 inputUrl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') runBtn.click(); });
 
-/* ========== エクスポート ========= */
-btnCsv.onclick = ()=> exportCSV(baseRows);
-btnJson.onclick= ()=> exportJSON(baseRows);
-function enableExports(enable){ btnCsv.disabled = btnJson.disabled = !enable; }
-function exportCSV(rows){
-  if (!rows.length) return;
-  const header = ['title','url','viewCount','likeCount','commentCount','publishedAt','videoId'];
-  const esc = (s)=>`"${String(s??'').replace(/"/g,'""')}"`;
-  const body = rows.map(r=> header.map(h=> esc(r[h])).join(',')).join('\n');
-  const csv = header.join(',')+'\n'+body;
-  const blob = new Blob([csv],{type:'text/csv'});
-  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`yt_export_${Date.now()}.csv`; a.click();
-  URL.revokeObjectURL(a.href);
-}
-function exportJSON(rows){
-  const blob = new Blob([JSON.stringify(rows, null, 2)],{type:'application/json'});
-  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`yt_export_${Date.now()}.json`; a.click();
-  URL.revokeObjectURL(a.href);
-}
-
 /* ========== コア処理（高速APIに挑戦→ダメなら従来フロー） ========== */
-async function runViaProxy(raw, detected){
-  const type = detected || detectInputType(raw);
+async function runViaProxy(raw){
+  const type = detectInputType(raw);
 
   // --- プレイリスト ---
   if (type.kind === 'playlist'){
     try{
       const r = await jsonp('playlistDetailsAll', { playlistId: type.playlistId, max: MAX_FETCH });
-      return { rows: r.items.map(toRowFromAPI), channel: null, stableKey: { kind:'playlist', id:type.playlistId } };
+      return { rows: r.items.map(toRowFromAPI), channel: null };
     }catch(_){
       const ids = await listPlaylistVideoIds_legacy(type.playlistId, MAX_FETCH);
-      const details = await fetchVideosDetails_legacy(ids, chooseConcurrency());
+      const details = await fetchVideosDetails_legacy(ids);
       const rows = ids.map((id,i)=> toRowFromDetail(details.get(id), id, i));
-      return { rows, channel: null, stableKey: { kind:'playlist', id:type.playlistId } };
+      return { rows, channel: null };
     }
   }
 
-  // --- チャンネル or 動画 or ハンドル ---
-  let channelId = null, stableKey=null;
-  if (type.kind==='channel'){ channelId=type.channelId; stableKey={kind:'channel', id:channelId}; }
-  if (type.kind==='video'){ channelId=await getChannelIdFromVideo(type.videoId); stableKey=channelId?{kind:'channel',id:channelId}:null; }
-  if (type.kind==='channelQuery'){ channelId=await searchChannelId(type.q); stableKey=channelId?{kind:'channel',id:channelId}:null; }
+  // --- チャンネル or 動画 → チャンネルID ---
+  let channelId = null;
+  if (type.kind==='channel') channelId=type.channelId;
+  if (type.kind==='video')   channelId=await getChannelIdFromVideo(type.videoId);
+  if (type.kind==='channelQuery') channelId=await searchChannelId(type.q);
   if (!channelId) throw new Error('チャンネルIDを解決できませんでした');
 
+  // 高速一括
   try{
     const r = await jsonp('channelUploadsDetailsAll', { id: channelId, max: MAX_FETCH });
     return {
@@ -352,19 +261,19 @@ async function runViaProxy(raw, detected){
       channel: r.channel ? {
         id:r.channel.id, title:r.channel.title, url:r.channel.url,
         subscriberCount:r.channel.subscriberCount, viewCount:r.channel.viewCount, videoCount:r.channel.videoCount
-      } : null,
-      stableKey: { kind:'channel', id: channelId }
+      } : null
     };
   }catch(_){
+    // フォールバック
     const uploadsInfo = await getUploadsPlaylistId(channelId);
     if (!uploadsInfo?.uploads) throw new Error('アップロード済みプレイリストが見つかりませんでした');
     const [ids, ch] = await Promise.all([
       listPlaylistVideoIds_legacy(uploadsInfo.uploads, MAX_FETCH),
       fetchChannelInfo(channelId)
     ]);
-    const details = await fetchVideosDetails_legacy(ids, chooseConcurrency());
+    const details = await fetchVideosDetails_legacy(ids);
     const rows = ids.map((id,i)=> toRowFromDetail(details.get(id), id, i));
-    return { rows, channel: ch, stableKey: { kind:'channel', id: channelId } };
+    return { rows, channel: ch };
   }
 }
 
@@ -394,7 +303,7 @@ function detectInputType(raw){
   return {kind:'channelQuery',q:s};
 }
 
-/* ========== 行変換 ========== */
+/* ========== 高速APIに使う行変換 ========== */
 function toRowFromAPI(it, i){
   return {
     url: `https://www.youtube.com/watch?v=${it.id}`,
@@ -407,9 +316,8 @@ function toRowFromAPI(it, i){
     __idx: i ?? 0
   };
 }
-function toRowFromDetail(d,id,i){ return { url:`https://www.youtube.com/watch?v=${id}`, title:d?.title??'', viewCount:d?.viewCount??null, likeCount:d?.likeCount??null, commentCount:d?.commentCount??null, publishedAt:d?.publishedAt??'', videoId:id, __idx:i }; }
 
-/* ========== 既存API（フォールバック） ========== */
+/* ========== フォールバック用（従来エンドポイント） ========== */
 async function fetchChannelInfo(channelId){ const r=await jsonp('channelInfo',{id:channelId}); const d=r?.data; if(!d) return null; return {id:d.id,title:d.title,url:d.url,subscriberCount:d.subscriberCount,viewCount:d.viewCount,videoCount:d.videoCount}; }
 async function getChannelIdFromVideo(vid){ const r=await jsonp('channelFromVideo',{id:vid}); return r?.channelId||null; }
 async function getUploadsPlaylistId(ch){ const r=await jsonp('uploads',{id:ch}); return r?.data||null; }
@@ -423,12 +331,12 @@ async function listPlaylistVideoIds_legacy(pid,maxCount){
 }
 async function fetchVideosDetails_legacy(videoIds, concurrency=6){
   const map=new Map(); const chunks=[]; for(let i=0;i<videoIds.length;i+=50) chunks.push(videoIds.slice(i,i+50));
-  let cursor=0;
-  async function worker(){ while(true){ const my=cursor++; if(my>=chunks.length) break; const ids=chunks[my].join(','); busy(true,`詳細取得中… ${Math.min((my+1)*50,videoIds.length)}/${videoIds.length}`); const r=await jsonp('videos',{ids}); for(const it of (r?.items||[])){ const st=it.statistics||{}, sn=it.snippet||{}; map.set(it.id,{title:sn.title??'',viewCount:st.viewCount!=null?Number(st.viewCount):null,likeCount:st.likeCount!=null?Number(st.likeCount):null,commentCount:st.commentCount!=null?Number(st.commentCount):null,publishedAt:sn.publishedAt??''}); } } }
+  let cursor=0; async function worker(){ while(true){ const my=cursor++; if(my>=chunks.length) break; const ids=chunks[my].join(','); busy(true,`詳細取得中… ${Math.min((my+1)*50,videoIds.length)}/${videoIds.length}`); const r=await jsonp('videos',{ids}); for(const it of (r?.items||[])){ const st=it.statistics||{}, sn=it.snippet||{}; map.set(it.id,{title:sn.title??'',viewCount:st.viewCount!=null?Number(st.viewCount):null,likeCount:st.likeCount!=null?Number(st.likeCount):null,commentCount:st.commentCount!=null?Number(st.commentCount):null,publishedAt:sn.publishedAt??''}); } } }
   await Promise.all(Array.from({length:Math.min(concurrency,chunks.length)},worker)); return map;
 }
+function toRowFromDetail(d,id,i){ return { url:`https://www.youtube.com/watch?v=${id}`, title:d?.title??'', viewCount:d?.viewCount??null, likeCount:d?.likeCount??null, commentCount:d?.commentCount??null, publishedAt:d?.publishedAt??'', videoId:id, __idx:i }; }
 
-/* ========== 並び替え & 描画（逐次描画で体感高速） ========== */
+/* ========== 並び替え & 描画 ========== */
 function sortAfter(rows,key){
   const byNum=(field,asc=true)=>(a,b)=>{ const av=Number(a[field]), bv=Number(b[field]); const aNaN=isNaN(av), bNaN=isNaN(bv);
     if(aNaN&&bNaN) return a.__idx-b.__idx; if(aNaN) return 1; if(bNaN) return -1; return asc?(av-bv):(bv-av); };
@@ -446,36 +354,14 @@ function sortAfter(rows,key){
     default        : return rows.sort((a,b)=> a.__idx-b.__idx);
   }
 }
-function renderRows(rows, chunked=true){
+function renderRows(rows){
   const now=Date.now();
   rows = rows.map(r=>{ const t=new Date(r.publishedAt||0).getTime(); const ageDays=isFinite(t)?Math.max((now-t)/86400000,1/24):NaN;
     const views=(r.viewCount==null||isNaN(r.viewCount))?NaN:Number(r.viewCount);
     const avg=(isNaN(views)||isNaN(ageDays))?NaN:Math.round((views/ageDays)*10)/10;
     return {...r, __avgPerDay: avg};
   });
-  chipGot.textContent=`取得件数：${rows.length}`;
-  listEl.innerHTML='';
-
-  if (!chunked || rows.length<=300){
-    listEl.appendChild(buildFrag(rows));
-    return;
-  }
-  // 大量件数は分割して描画（体感高速）
-  const CHUNK = 200;
-  let i = 0;
-  const renderChunk = () => {
-    if (i >= rows.length) return;
-    const part = rows.slice(i, i+=CHUNK);
-    listEl.appendChild(buildFrag(part));
-    if ('requestIdleCallback' in window){
-      requestIdleCallback(renderChunk, {timeout: 50});
-    }else{
-      setTimeout(renderChunk, 0);
-    }
-  };
-  renderChunk();
-}
-function buildFrag(rows){
+  listEl.innerHTML=''; chipGot.textContent=`取得件数：${rows.length}`;
   const frag=document.createDocumentFragment();
   rows.forEach((r)=>{ const li=document.createElement('li'); li.className='v';
     const a=document.createElement('a'); a.href=r.url; a.target='_blank'; a.rel='noopener noreferrer'; a.textContent=r.title||'(no title)'; li.appendChild(a);
@@ -489,17 +375,12 @@ function buildFrag(rows){
     ].map((t,idx)=> idx===0?t:`<span class="sep"></span>${t}`).join('');
     li.appendChild(meta); frag.appendChild(li);
   });
-  return frag;
+  listEl.appendChild(frag);
 }
 function setChannel(ch,got=0){
-  if(!ch){ chPanel.style.display='none'; chipGot.textContent='取得件数：0'; enableExports(false); return; }
+  if(!ch){ chPanel.style.display='none'; chipGot.textContent='取得件数：0'; return; }
   chPanel.style.display=''; chTitle.innerHTML=`<a href="${ch.url}" target="_blank" rel="noopener noreferrer">${esc(ch.title||'')}</a>`;
   chipSubs.textContent=`登録者数：${fmtNum(ch.subscriberCount)}人`; chipViews.textContent=`総再生回数：${fmtNum(ch.viewCount)}回`;
   chipCount.textContent=`動画数：${fmtNum(ch.videoCount)}本`; chipGot.textContent=`取得件数：${got}`;
 }
-
-/* 初期：前回の並び替え設定を復元 */
-(function restoreSort(){
-  try{ const v=localStorage.getItem(LS_PREFIX+'sortKey'); if (v) postSort.value=v; }catch{}
-})();
 </script>
