@@ -58,11 +58,6 @@ Google Apps Script をバックエンドに利用し、APIキーを安全に管�
 
 ---
 
-### 📜 ライセンス
-MIT License © 2025 [zsdghlk](https://github.com/zsdghlk)  
-
----
-
 ## 🇺🇸 English Version
 
 ### 📖 Overview
@@ -112,5 +107,13 @@ It uses **Google Apps Script** as a backend proxy to keep API keys secure while 
 
 ---
 
-### 📜 License
+## 📜 License
 MIT License © 2025 [zsdghlk](https://github.com/zsdghlk)  
+
+> This software is released under the **MIT License**.  
+> You are free to use, modify, and distribute it, but you must keep the copyright notice and license text.  
+> The software is provided “as is” without warranty — use it at your own risk.  
+
+> このソフトウェアは **MITライセンス** で提供されています。  
+> 誰でも自由に利用・改造・配布できますが、著作権表記とライセンス文は残す必要があります。  
+> また、バグや損害について作者は責任を負いません（自己責任でご利用ください）。  
