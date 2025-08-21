@@ -142,6 +142,27 @@
     position:absolute; width:1px; height:1px; padding:0; margin:-1px;
     overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
   }
+
+      /* === 「取得」ボタンの縦書き防止（横書き固定 & 1行固定） === */
+#run,
+.btn,
+button {
+  writing-mode: horizontal-tb !important; /* 横書きに固定 */
+  text-orientation: mixed !important;
+  white-space: nowrap;                    /* 改行しない */
+  display: inline-flex;                   /* 中央寄せ */
+  align-items: center;
+  justify-content: center;
+  letter-spacing: .02em;
+}
+
+/* 念のためボタン内の要素にも適用（将来アイコン等を入れても崩れない） */
+#run * {
+  writing-mode: horizontal-tb !important;
+  text-orientation: mixed !important;
+  white-space: nowrap;
+}
+
 </style>
 
 
