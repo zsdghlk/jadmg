@@ -5,7 +5,7 @@
  * - 互換API：health, channelInfo, channelFromVideo, uploads, playlistItems, videos, searchChannel
  */
 
-(function(){})();// 無害な IIFE（エディタの自動挿入対策）
+(function(){})();
 
 /* ========== APIキー ========== */
 function setApiKey_(key){
@@ -54,18 +54,14 @@ function doGet(e){
     if(op==='health') return outJSON_({ ok:true, time:(new Date()).toISOString() }, cb);
 
     switch(op){
-      // 高速API
       case 'playlistDetailsAll'      : return op_playlistDetailsAll_(p, cb);
       case 'channelUploadsDetailsAll': return op_channelUploadsDetailsAll_(p, cb);
-
-      // 互換API（フロントのフォールバック用）
       case 'channelInfo'     : return yt_channelInfo_(p, cb);
       case 'channelFromVideo': return yt_channelFromVideo_(p, cb);
       case 'uploads'         : return yt_uploads_(p, cb);
       case 'playlistItems'   : return yt_playlistItems_(p, cb);
       case 'videos'          : return yt_videos_(p, cb);
       case 'searchChannel'   : return yt_searchChannel_(p, cb);
-
       default: return outErr_('unknown op', cb);
     }
   }catch(err){
@@ -75,19 +71,17 @@ function doGet(e){
 }
 
 /* ========== 高速API 実装 ========== */
-// プレイリストの全 videoId を集め、videos.list を並列で叩いて整形して返す
 function op_playlistDetailsAll_(p, cb){
   var pid=String(p.playlistId||'').trim();
   if(!isPlaylistId_(pid)) return outErr_('invalid playlist id', cb);
   var max=p.max ? Math.min(5000, Math.max(1, Number(p.max))) : 5000;
 
-  var ids=_listAllVideoIdsFromPlaylist_(pid, max); // 逐次ページング（サーバー内なので往復ゼロ）
-  var items=_fetchVideosDetailsBatch_(ids);        // fetchAll で並列
+  var ids=_listAllVideoIdsFromPlaylist_(pid, max);
+  var items=_fetchVideosDetailsBatch_(ids);
 
   return outJSON_({ items: items }, cb);
 }
 
-// チャンネルID → uploads を解決し、上と同じ
 function op_channelUploadsDetailsAll_(p, cb){
   var id=String(p.id||'').trim();
   if(!isChannelId_(id)) return outErr_('invalid channel id', cb);
@@ -117,7 +111,6 @@ function op_channelUploadsDetailsAll_(p, cb){
   return outJSON_({ channel: ch, items: items }, cb);
 }
 
-/* 内部：プレイリストの全 videoId を順次取得（fields で極小化） */
 function _listAllVideoIdsFromPlaylist_(playlistId, max){
   var key=getApiKey_(), ids=[], pageToken='', remain=max;
   do{
@@ -133,7 +126,6 @@ function _listAllVideoIdsFromPlaylist_(playlistId, max){
   return ids;
 }
 
-/* 内部：videos.list を 50件ずつに分割し、UrlFetchApp.fetchAll で並列取得 → 必要最小の形に整形 */
 function _fetchVideosDetailsBatch_(videoIds){
   if(!videoIds || !videoIds.length) return [];
   var key=getApiKey_();
