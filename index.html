@@ -77,20 +77,67 @@
   .btn:active{ transform: translateY(1px) scale(.998) }
   .status{ color:var(--muted); min-height:1.2em; font-size:14px }
 
+      
   /* チャンネル情報 */
   .statbar{ display:grid; gap:10px; grid-template-columns:1fr; }
   .chips{ display:flex; gap:8px; flex-wrap:wrap; }
       
- /* ベースのチップ（読みやすいコントラスト） */
-.chip{
-  border:1px solid var(--bd);
-  border-radius:999px;
-  padding:.5em .9em;                /* タッチ領域を最低48px相当に確保（行高と合わせて） */
-  background:#fff;                   /* ライトでもダークでも視認性の高い薄背景 */
-  color:#2b2f36;                     /* 暗めテキストでコントラスト確保 */
-  font-weight:700;
-  line-height:1.4;
+/* ===== 見やすさ改善（追記用オーバーライド） ===== */
+
+/* チップの配色を変数化（ライト/ダークで最適化） */
+:root{
+  --chip-bg: #0e1117;     /* dark 背景で読みやすい微黒 */
+  --chip-fg: #e9eef6;     /* 高コントラストな文字色 */
+  --link:    #8ab4ff;     /* dark で映えるリンク色 */
 }
+@media (prefers-color-scheme: light){
+  :root{
+    --chip-bg: #ffffff;   /* 白基調 */
+    --chip-fg: #2b2f36;   /* くっきりダークテキスト */
+    --link:    #0b57d0;   /* 既読未読に左右されにくい濃青 */
+  }
+}
+
+/* すべてのチップを同一トーンに（押しやすい高さ） */
+.chip{
+  background: var(--chip-bg);
+  color: var(--chip-fg);
+  border: 1px solid var(--bd);
+  border-radius: 999px;
+  padding: .55em .95em;
+  font-weight: 700;
+  line-height: 1.4;
+  min-height: 44px;                /* スマホでのタッチ領域 */
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 取得件数バッジも他と完全同一トーンに */
+.chip.count{
+  background: var(--chip-bg) !important;
+  color: var(--chip-fg) !important;
+  border-color: var(--bd) !important;
+  box-shadow: none !important;
+}
+
+/* リンク：強コントラスト＋下線で可視性UP（カード内＆タイトル） */
+.v a,
+.ch-title a{
+  color: var(--link) !important;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  font-weight: 800;
+}
+
+/* フォーカス時の視認性（キーボード操作/アクセシビリティ） */
+.v a:focus-visible,
+.ch-title a:focus-visible{
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
 
 /* 取得件数バッジ（強コントラスト・アクセント準拠） */
 .chip.count{
