@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- 高コントラスト & PWA想定のCSP -->
+  <!-- 高コントラスト & PWA想定のCSP（強化版） -->
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self';
                  script-src 'self' https://script.google.com https://script.googleusercontent.com 'nonce-yttool123';
@@ -12,7 +12,11 @@
                  img-src 'self' data:;
                  style-src 'self' 'unsafe-inline';
                  worker-src 'self';
-                 manifest-src 'self'">
+                 manifest-src 'self';
+                 object-src 'none';
+                 base-uri 'self'">
+  <!-- リファラを送らない（外部遷移の情報漏れ抑止） -->
+  <meta name="referrer" content="no-referrer">
 
   <title>YouTubeじょうほう一括取得</title>
   <link rel="manifest" href="./manifest.webmanifest">
@@ -23,20 +27,14 @@
     :root{
       --bg:#ffffff; --panel:#ffffff; --text:#111111; --muted:#4a4a4a; --bd:#dcdfe4;
       --accent:#0b66ff; --accent-2:#094fd1; --ok:#11895a; --warn:#b25a00;
-      --chip-bg:#ffffff;          /* チップ背景（Light） */
-      --chip-fg:#111111;          /* チップ文字色（Light） */
-      --link:#0b57d0;             /* 強コントラストリンク（Light） */
-      --tap:48px;                 /* 最小タッチサイズ */
-      --radius:14px;              /* 角丸 */
-      --shadow:0 1px 2px rgba(0,0,0,.08);
+      --chip-bg:#ffffff; --chip-fg:#111111; --link:#0b57d0;
+      --tap:48px; --radius:14px; --shadow:0 1px 2px rgba(0,0,0,.08);
     }
     @media (prefers-color-scheme: dark){
       :root{
         --bg:#111418; --panel:#161a20; --text:#f5f7fa; --muted:#b5bcc6; --bd:#283041;
         --accent:#5c96ff; --accent-2:#3c78f2; --ok:#1db47a; --warn:#ffb020;
-        --chip-bg:#0e1117;         /* チップ背景（Dark） */
-        --chip-fg:#e9eef6;         /* チップ文字色（Dark） */
-        --link:#8ab4ff;            /* 強コントラストリンク（Dark） */
+        --chip-bg:#0e1117; --chip-fg:#e9eef6; --link:#8ab4ff;
         --shadow:0 1px 2px rgba(0,0,0,.35);
       }
     }
@@ -57,7 +55,7 @@
     }
     header h1{ margin:0; font-size:20px; font-weight:800; letter-spacing:.2px }
 
-    /* ====== UIカード ====== */
+    /* ====== カード ====== */
     .panel{
       background:var(--panel); border:1px solid var(--bd);
       border-radius:var(--radius); padding:12px; box-shadow:var(--shadow); margin:12px 0;
@@ -92,81 +90,44 @@
     /* ====== チャンネル情報 ====== */
     .statbar{ display:grid; gap:10px; grid-template-columns:1fr; }
     .chips{ display:flex; gap:8px; flex-wrap:wrap; }
-
-    /* チップ（取得件数を含め全て同一トーン） */
-    .chip,
-    .chip.count{
-      background:var(--chip-bg);
-      color:var(--chip-fg);
-      border:1px solid var(--bd);
-      border-radius:999px;
-      padding:.55em .95em;
-      font-weight:700;
-      line-height:1.4;
-      min-height:48px;               /* ガイドライン通りのタッチ領域 */
-      display:inline-flex;
-      align-items:center;
+    .chip,.chip.count{
+      background:var(--chip-bg); color:var(--chip-fg);
+      border:1px solid var(--bd); border-radius:999px;
+      padding:.55em .95em; font-weight:700; line-height:1.4;
+      min-height:48px; display:inline-flex; align-items:center;
     }
 
-    /* ====== リスト/リンクの視認性 ====== */
+    /* ====== リスト/リンク ====== */
     ol.video-list{ list-style:none; margin:8px 0 0; padding:0; }
     .v{
       border:1px solid var(--bd); border-radius:12px; padding:12px; margin:10px 0;
       background:var(--panel); box-shadow:var(--shadow);
     }
-
-    /* 強コントラストのリンク（カード内＆タイトル） */
-    .v a,
-    .ch-title a{
-      color:var(--link);
-      text-decoration:underline;
-      text-decoration-thickness:2px;
-      text-underline-offset:3px;
-      font-weight:800;
-      word-break:break-word;
+    .v a,.ch-title a{
+      color:var(--link); text-decoration:underline;
+      text-decoration-thickness:2px; text-underline-offset:3px;
+      font-weight:800; word-break:break-word;
     }
-    .v a:focus-visible,
-    .ch-title a:focus-visible{
-      outline:2px solid var(--link);
-      outline-offset:2px;
-      border-radius:6px;
+    .v a:focus-visible,.ch-title a:focus-visible{
+      outline:2px solid var(--link); outline-offset:2px; border-radius:6px;
     }
-
     .meta{
       margin-top:6px; color:var(--muted); font-size:14px;
       display:flex; gap:10px; flex-wrap:wrap;
     }
     .sep::before{ content:'•'; margin:0 .5em; color:color-mix(in oklab, var(--muted) 60%, transparent) }
 
-    /* アクセシビリティ（スクリーンリーダー専用） */
-    .sr{
-      position:absolute; width:1px; height:1px; padding:0; margin:-1px;
-      overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
-    }
+    .sr{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 
-    /* === 「取得」ボタンの縦書き防止（横書き固定 & 1行固定） === */
-    #run, .btn, button{
-      writing-mode:horizontal-tb !important;
-      text-orientation:mixed !important;
-      white-space:nowrap;
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      letter-spacing:.02em;
-    }
-    #run *{
-      writing-mode:horizontal-tb !important;
-      text-orientation:mixed !important;
-      white-space:nowrap;
-    }
+    /* 「取得」が縦にならないよう横書き固定 */
+    #run,.btn,button{ writing-mode:horizontal-tb!important; text-orientation:mixed!important; white-space:nowrap; display:inline-flex; align-items:center; justify-content:center; letter-spacing:.02em; }
+    #run *{ writing-mode:horizontal-tb!important; text-orientation:mixed!important; white-space:nowrap; }
   </style>
 </head>
 
 <body>
   <div class="wrap">
-    <header>
-      <h1>YouTubeじょうほう一括取得</h1>
-    </header>
+    <header><h1>YouTubeじょうほう一括取得</h1></header>
 
     <!-- 入力 -->
     <section class="panel" aria-labelledby="input-label">
@@ -216,25 +177,27 @@
       <ol id="list" class="video-list"></ol>
     </section>
 
-    <!-- 取り扱い説明（簡潔） -->
+    <!-- 取り扱い説明 -->
     <section class="panel" aria-labelledby="help-title">
       <h2 id="help-title" class="sr">使い方</h2>
       <ul style="margin:0; padding-left:18px; color:var(--muted); font-size:14px">
-        <li>動画URLを貼った場合は、その<strong>動画のチャンネル全動画</strong>を取得しちゃうよ</li>
+        <li>動画URLなら、その<strong>動画のチャンネルの全動画</strong>を取得。</li>
+        <li>プレイリストURL/IDなら、その<strong>プレイリストの全動画</strong>を取得（チャンネル統計は非表示）。</li>
+        <li>APIキーはサーバー側保管で、ブラウザには出ません。</li>
       </ul>
     </section>
   </div>
 
-  <!-- PWA登録（nonce一致・相対パスでGitHub Pages対応） -->
+  <!-- PWA登録（GitHub Pages対応の相対パス） -->
   <script nonce="yttool123">
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
+    addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(()=>{});
     });
   }
   </script>
 
-  <!-- アプリ本体（nonce一致） -->
+  <!-- アプリ本体 -->
   <script nonce="yttool123">
   /* ========= 設定 ========= */
   const API_BASE = 'https://script.google.com/macros/s/AKfycbxOwLPNL5zlcyzChiywKmFNzrtKDgC1JrcUJAs3FB8cG5UlOUoyDi4VvDY-cVuMq9czdg/exec';
@@ -254,7 +217,7 @@
   const listEl   = document.getElementById('list');
 
   /* ========= 状態 ========= */
-  let baseRows = [];      // 取得した生データ（以後の並び替えはここからローカルで）
+  let baseRows = [];
   let lastChannel = null;
   const MAX_FETCH = 5000;
 
@@ -273,7 +236,8 @@
       for(const [k,v] of Object.entries(params)) if(v!=null && v!=='') u.searchParams.set(k,String(v));
       u.searchParams.set('callback', cbName);
 
-      const scr=document.createElement('script'); const timer=setTimeout(()=>{cleanup();reject(new Error('JSONP timeout'));},30000);
+      const scr=document.createElement('script');
+      const timer=setTimeout(()=>{cleanup();reject(new Error('JSONP timeout'));},30000);
       function cleanup(){ clearTimeout(timer); try{ delete window[cbName]; }catch{} scr.remove(); }
       window[cbName]=(data)=>{ cleanup(); data&&data.error ? reject(new Error(data.error)) : resolve(data); };
       scr.onerror=()=>{ cleanup(); reject(new Error('JSONP network error')); };
@@ -290,7 +254,7 @@
   (async function bootCheck(){
     if (!isValidExecURL(API_BASE)) { statusEl.textContent='エラー: API_BASE が未設定か不正です'; runBtn.disabled=true; return; }
     try{ await jsonp('health'); runBtn.disabled=false; statusEl.textContent=''; }
-    catch(e){ runBtn.disabled=true; statusEl.textContent='エラー: GAS に接続できません（デプロイと YT_API_KEY を確認）'; console.error(e); }
+    catch{ runBtn.disabled=true; statusEl.textContent='エラー: GAS に接続できません（デプロイと YT_API_KEY を確認）'; }
   })();
 
   /* ========= UI ハンドラ ========= */
@@ -391,7 +355,7 @@
     return {kind:'channelQuery',q:s};
   }
 
-  /* ========= 行変換（高速API） ========= */
+  /* ========= 行変換 ========= */
   function toRowFromAPI(it, i){
     return {
       url: `https://www.youtube.com/watch?v=${it.id}`,
@@ -490,9 +454,12 @@
   }
   function setChannel(ch,got=0){
     if(!ch){ chPanel.style.display='none'; chipGot.textContent='取得件数：0'; return; }
-    chPanel.style.display=''; chTitle.innerHTML=`<a href="${ch.url}" target="_blank" rel="noopener noreferrer">${esc(ch.title||'')}</a>`;
-    chipSubs.textContent=`登録者数：${fmtNum(ch.subscriberCount)}人`; chipViews.textContent=`総再生回数：${fmtNum(ch.viewCount)}回`;
-    chipCount.textContent=`動画数：${fmtNum(ch.videoCount)}本`; chipGot.textContent=`取得件数：${got}`;
+    chPanel.style.display='';
+    chTitle.innerHTML=`<a href="${ch.url}" target="_blank" rel="noopener noreferrer">${esc(ch.title||'')}</a>`;
+    chipSubs.textContent=`登録者数：${fmtNum(ch.subscriberCount)}人`;
+    chipViews.textContent=`総再生回数：${fmtNum(ch.viewCount)}回`;
+    chipCount.textContent=`動画数：${fmtNum(ch.videoCount)}本`;
+    chipGot.textContent=`取得件数：${got}`;
   }
   </script>
 </body>
