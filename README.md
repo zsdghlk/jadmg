@@ -29,7 +29,7 @@ Google Apps Script をバックエンドに利用し、APIキーを安全に管�
 
 ### 🎮 このサイトの使い方（ユーザー向け）
 
-1. [デモページ]([https://zsdghlk.github.io/yt-fetcher/](https://zsdghlk.github.io/jadmg/)) を開く  
+1. [デモページ]([https://zsdghlk.github.io/yt-fetcher/](https://zsdghlk.github.io/jadmg/) を開く  
 2. 入力欄に YouTube のURLを貼る  
    - チャンネルURL  
    - 動画URL  
