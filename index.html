@@ -54,8 +54,23 @@
     header{
       position:sticky; top:0; z-index:10; background:var(--bg);
       padding:10px 0 8px; border-bottom:1px solid var(--bd);
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
     }
     header h1{ margin:0; font-size:20px; font-weight:800; letter-spacing:.2px }
+
+    /* 言語切り替え */
+    .lang{
+      display:flex; align-items:center; gap:8px;
+      font-size:14px; color:var(--muted);
+    }
+    .lang select{
+      min-height:var(--tap); padding:8px 10px; border-radius:10px;
+      border:1px solid var(--bd);
+      background:#fff; color:#000;
+    }
+    @media (prefers-color-scheme: dark){
+      .lang select{ background:#12161c; color:#f5f7fa; }
+    }
 
     /* ====== UIカード ====== */
     .panel{
@@ -103,9 +118,8 @@
       padding:.55em .95em;
       font-weight:700;
       line-height:1.4;
-      min-height:48px;               /* ガイドライン通りのタッチ領域 */
-      display:inline-flex;
-      align-items:center;
+      min-height:48px;
+      display:inline-flex; align-items:center;
     }
 
     /* ====== リスト/リンクの視認性 ====== */
@@ -137,9 +151,9 @@
       margin-top:8px;
       display:flex;
       flex-wrap:wrap;
-      gap:8px 10px;     /* 行間 8px / 列間 10px */
+      gap:8px 10px;
     }
-    .mi{                  /* meta item */
+    .mi{
       background:var(--chip-bg);
       color:var(--chip-fg);
       border:1px solid var(--bd);
@@ -150,7 +164,7 @@
       align-items:center;
       line-height:1.3;
     }
-    .mi b{ font-weight:800; margin-right:.45em; }  /* 「再生」「高評価」などのラベルを太字＆余白 */
+    .mi b{ font-weight:800; margin-right:.45em; }
 
     /* アクセシビリティ（スクリーンリーダー専用） */
     .sr{
@@ -163,9 +177,7 @@
       writing-mode:horizontal-tb !important;
       text-orientation:mixed !important;
       white-space:nowrap;
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
+      display:inline-flex; align-items:center; justify-content:center;
       letter-spacing:.02em;
     }
     #run *{
@@ -179,7 +191,14 @@
 <body>
   <div class="wrap">
     <header>
-      <h1>YouTubeじょうほう一括取得</h1>
+      <h1 id="appTitle">YouTubeじょうほう一括取得</h1>
+      <div class="lang">
+        <label for="langSel" id="langLabel">言語</label>
+        <select id="langSel" aria-label="Language">
+          <option value="ja">JA</option>
+          <option value="en">EN</option>
+        </select>
+      </div>
     </header>
 
     <!-- 入力 -->
@@ -192,9 +211,9 @@
                  placeholder="例）https://www.youtube.com/@Google など" />
         </div>
         <div>
-          <label for="postSort">並び替え</label>
+          <label for="postSort" id="sortLabel">並び替え</label>
           <select id="postSort" aria-label="並び替え">
-            <option value="none" selected>取得順のまま</option>
+            <option value="none"    selected>取得順のまま</option>
             <option value="viewsDesc">視聴回数 多い順</option>
             <option value="viewsAsc">視聴回数 少ない順</option>
             <option value="likesDesc">高評価 多い順</option>
@@ -234,7 +253,7 @@
     <section class="panel" aria-labelledby="help-title">
       <h2 id="help-title" class="sr">使い方</h2>
       <ul style="margin:0; padding-left:18px; color:var(--muted); font-size:14px">
-        <li>※お試し版のため、最大<strong>300本</strong>まで取得します</li>
+        <li id="helpNote">※お試し版のため、最大<strong>300本</strong>まで取得します</li>
       </ul>
     </section>
   </div>
@@ -253,11 +272,122 @@
   /* ========= 設定 ========= */
   const API_BASE = 'https://script.google.com/macros/s/AKfycbxOwLPNL5zlcyzChiywKmFNzrtKDgC1JrcUJAs3FB8cG5UlOUoyDi4VvDY-cVuMq9czdg/exec';
 
+  /* ========= I18N ========= */
+  const I18N = {
+    ja: {
+      appTitle:'YouTubeじょうほう一括取得',
+      langLabel:'言語',
+      urlLabel:'URLを貼ってね',
+      urlPh:'例）https://www.youtube.com/@Google など',
+      sortLabel:'並び替え',
+      sortOpts:{
+        none:'取得順のまま',
+        viewsDesc:'視聴回数 多い順',
+        viewsAsc:'視聴回数 少ない順',
+        likesDesc:'高評価 多い順',
+        likesAsc:'高評価 少ない順',
+        commentsDesc:'コメント 多い順',
+        commentsAsc:'コメント 少ない順',
+        newest:'公開日 新しい順',
+        oldest:'公開日 古い順'
+      },
+      fetch:'取得',
+      helpNote:'※お試し版のため、最大<strong>300本</strong>まで取得します',
+      stat:{
+        subs:'登録者数：{n}人',
+        views:'総再生回数：{n}回',
+        videos:'動画数：{n}本',
+        got:'取得件数：{n}'
+      },
+      meta:{ views:'再生', likes:'高評価', comments:'コメント', date:'日付', viewsUnit:' 回' },
+      status:{ analyzing:'解析中…', fetching:'取得中…', sorting:'並び替え（再取得なし）', ok:'{n} 件 取得しました',
+               healthErr:'エラー: GAS に接続できません（デプロイと YT_API_KEY を確認）',
+               apiBaseErr:'エラー: API_BASE が未設定か不正です',
+               inputReq:'URL を入力してください',
+               idResolveErr:'チャンネルIDを解決できませんでした' },
+      locale:'ja-JP'
+    },
+    en: {
+      appTitle:'YouTube Bulk Info Fetcher',
+      langLabel:'Language',
+      urlLabel:'Paste a YouTube URL',
+      urlPh:'e.g. https://www.youtube.com/@Google',
+      sortLabel:'Sort',
+      sortOpts:{
+        none:'As fetched',
+        viewsDesc:'Views: high → low',
+        viewsAsc:'Views: low → high',
+        likesDesc:'Likes: high → low',
+        likesAsc:'Likes: low → high',
+        commentsDesc:'Comments: high → low',
+        commentsAsc:'Comments: low → high',
+        newest:'Publish date: newest',
+        oldest:'Publish date: oldest'
+      },
+      fetch:'Fetch',
+      helpNote:'Trial mode: up to <strong>300 items</strong> per fetch.',
+      stat:{
+        subs:'Subscribers: {n}',
+        views:'Channel views: {n}',
+        videos:'Videos: {n}',
+        got:'Fetched: {n}'
+      },
+      meta:{ views:'Views', likes:'Likes', comments:'Comments', date:'Date', viewsUnit:'' },
+      status:{ analyzing:'Analyzing…', fetching:'Fetching…', sorting:'Sorted (no re-fetch)', ok:'Fetched {n} items',
+               healthErr:'Error: cannot reach GAS (check deployment and YT_API_KEY)',
+               apiBaseErr:'Error: API_BASE missing or invalid',
+               inputReq:'Please enter a URL',
+               idResolveErr:'Could not resolve channel ID' },
+      locale:'en-US'
+    }
+  };
+  let LANG = localStorage.getItem('lang') || (navigator.language?.startsWith('en') ? 'en' : 'ja');
+
+  function t(path, vars){
+    const seg = path.split('.');
+    let cur = I18N[LANG];
+    for(const k of seg){ cur = cur?.[k]; }
+    let s = String(cur ?? '');
+    if(vars) for(const [k,v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, v);
+    return s;
+  }
+
+  function applyI18nStatic(){
+    document.documentElement.lang = LANG;
+    document.getElementById('appTitle').textContent = t('appTitle');
+    document.getElementById('langLabel').textContent = t('langLabel');
+    document.getElementById('input-label').textContent = t('urlLabel');
+    document.getElementById('inputUrl').placeholder = t('urlPh');
+    document.getElementById('sortLabel').textContent = t('sortLabel');
+
+    const opts = document.getElementById('postSort').options;
+    const map = ['none','viewsDesc','viewsAsc','likesDesc','likesAsc','commentsDesc','commentsAsc','newest','oldest'];
+    map.forEach((k,i)=>{ if(opts[i]) opts[i].textContent = t('sortOpts.'+k); });
+
+    const runBtn = document.getElementById('run');
+    runBtn.textContent = t('fetch');
+
+    document.getElementById('helpNote').innerHTML = t('helpNote');
+  }
+
+  function applyI18nStats(ch, got=0){
+    const fmt = n => (n==null||isNaN(n))?'-':Number(n).toLocaleString(LANG==='ja'?'ja-JP':'en-US');
+    if(!ch){
+      document.getElementById('chipGot').textContent = t('stat.got',{n:0});
+      return;
+    }
+    document.getElementById('chipSubs').textContent  = t('stat.subs',{n:fmt(ch.subscriberCount)});
+    document.getElementById('chipViews').textContent = t('stat.views',{n:fmt(ch.viewCount)});
+    document.getElementById('chipCount').textContent = t('stat.videos',{n:fmt(ch.videoCount)});
+    document.getElementById('chipGot').textContent   = t('stat.got',{n:fmt(got)});
+  }
+
   /* ========= DOM ========= */
   const inputUrl = document.getElementById('inputUrl');
   const postSort = document.getElementById('postSort');
   const runBtn   = document.getElementById('run');
   const statusEl = document.getElementById('status');
+  const langSel  = document.getElementById('langSel');
 
   const chPanel  = document.getElementById('chPanel');
   const chTitle  = document.getElementById('chTitle');
@@ -268,7 +398,7 @@
   const listEl   = document.getElementById('list');
 
   /* ========= 状態 ========= */
-  let baseRows = [];      // 取得した生データ（以後の並び替えはここからローカルで）
+  let baseRows = [];      // 取得した生データ
   let lastChannel = null;
   const MAX_FETCH = 300;  // お試し上限（フロント側）
 
@@ -279,10 +409,10 @@
   }
   function jsonp(endpoint, params={}){
     const base=(API_BASE||'').trim();
-    if(!isValidExecURL(base)) throw new Error('API_BASE が未設定か不正です（/exec の完全URLを設定）');
+    if(!isValidExecURL(base)) throw new Error(t('status.apiBaseErr'));
     const cbName='__jp'+Math.random().toString(36).slice(2);
     return new Promise((resolve,reject)=>{
-      let u; try{ u=new URL(base); }catch{ reject(new Error('API_BASE の URL 形式が不正です')); return; }
+      let u; try{ u=new URL(base); }catch{ reject(new Error(t('status.apiBaseErr'))); return; }
       u.searchParams.set('op', endpoint);
       for(const [k,v] of Object.entries(params)) if(v!=null && v!=='') u.searchParams.set(k,String(v));
       u.searchParams.set('callback', cbName);
@@ -295,33 +425,49 @@
       document.body.appendChild(scr);
     });
   }
-  function busy(b,msg){ runBtn.disabled=b; runBtn.setAttribute('aria-busy', b?'true':'false'); statusEl.textContent=b?(msg||'取得中…'):''; }
+  function busy(b,msg){ runBtn.disabled=b; runBtn.setAttribute('aria-busy', b?'true':'false'); statusEl.textContent=b?(msg||''):''; }
   function toast(msg){ statusEl.textContent=msg; setTimeout(()=> statusEl.textContent='',1600); }
-  function fmtNum(n){ return (n==null||isNaN(n))?'-':Number(n).toLocaleString('ja-JP'); }
+  function fmtNum(n){ return (n==null||isNaN(n))?'-':Number(n).toLocaleString(LANG==='ja'?'ja-JP':'en-US'); }
   function esc(s){ return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
   /* ========= 起動時ヘルスチェック ========= */
   (async function bootCheck(){
-    if (!isValidExecURL(API_BASE)) { statusEl.textContent='エラー: API_BASE が未設定か不正です'; runBtn.disabled=true; return; }
+    // 初期言語適用
+    langSel.value = LANG;
+    applyI18nStatic();
+
+    if (!isValidExecURL(API_BASE)) { statusEl.textContent=t('status.apiBaseErr'); runBtn.disabled=true; return; }
     try{ await jsonp('health'); runBtn.disabled=false; statusEl.textContent=''; }
-    catch(e){ runBtn.disabled=true; statusEl.textContent='エラー: GAS に接続できません（デプロイと YT_API_KEY を確認）'; console.error(e); }
+    catch(e){ runBtn.disabled=true; statusEl.textContent=t('status.healthErr'); console.error(e); }
   })();
+
+  /* ========= 言語切り替え ========= */
+  langSel.addEventListener('change', ()=>{
+    LANG = langSel.value === 'en' ? 'en' : 'ja';
+    localStorage.setItem('lang', LANG);
+    applyI18nStatic();
+    // 既に取得済みデータがあれば、表記（チップ/日付/トースト）更新
+    renderRows(sortAfter([...baseRows], postSort.value));
+    if (lastChannel) applyI18nStats(lastChannel, baseRows.length);
+  });
 
   /* ========= UI ハンドラ ========= */
   runBtn.onclick = async () => {
     const raw = inputUrl.value.trim();
-    if (!raw) return alert('URL を入力してください');
+    if (!raw) return alert(t('status.inputReq'));
     try{
-      busy(true, '解析中…'); setChannel(null); renderRows([]);
+      busy(true, t('status.analyzing')); setChannel(null); renderRows([]);
       const {rows, channel} = await runViaProxy(raw);
       baseRows   = rows;
       lastChannel= channel;
       const sorted = sortAfter([...baseRows], postSort.value);
       setChannel(channel, sorted.length);
       renderRows(sorted);
-      toast(`${sorted.length} 件 取得しました`);
+      toast(t('status.ok',{n:sorted.length}));
     }catch(err){
-      console.error(err); setChannel(null); renderRows([]); alert('エラー: '+(err?.message||err));
+      console.error(err); setChannel(null); renderRows([]);
+      const msg = err?.message?.includes('チャンネルID') || err?.message?.toLowerCase?.().includes('channel') ? t('status.idResolveErr') : (err?.message||String(err));
+      alert(msg);
     }finally{ busy(false); }
   };
   postSort.addEventListener('change', () => {
@@ -329,11 +475,11 @@
     const rows = sortAfter([...baseRows], postSort.value);
     renderRows(rows);
     if (lastChannel) setChannel(lastChannel, rows.length);
-    toast('並び替え（再取得なし）');
+    toast(t('status.sorting'));
   });
   inputUrl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') runBtn.click(); });
 
-  /* ========= コア処理（高速API→ダメならフォールバック） ========= */
+  /* ========= コア処理 ========= */
   async function runViaProxy(raw){
     const type = detectInputType(raw);
 
@@ -355,7 +501,7 @@
     if (type.kind==='channel') channelId=type.channelId;
     if (type.kind==='video')   channelId=await getChannelIdFromVideo(type.videoId);
     if (type.kind==='channelQuery') channelId=await searchChannelId(type.q);
-    if (!channelId) throw new Error('チャンネルIDを解決できませんでした');
+    if (!channelId) throw new Error(t('status.idResolveErr'));
 
     try{
       const r = await jsonp('channelUploadsDetailsAll', { id: channelId, max: MAX_FETCH });
@@ -368,7 +514,7 @@
       };
     }catch(_){
       const uploadsInfo = await getUploadsPlaylistId(channelId);
-      if (!uploadsInfo?.uploads) throw new Error('アップロード済みプレイリストが見つかりませんでした');
+      if (!uploadsInfo?.uploads) throw new Error('Uploads playlist not found');
       const [ids, ch] = await Promise.all([
         listPlaylistVideoIds_legacy(uploadsInfo.uploads, MAX_FETCH),
         fetchChannelInfo(channelId)
@@ -429,7 +575,7 @@
     while(ids.length<Math.min(maxCount,MAX_FETCH)){
       const r=await jsonp('playlistItems',{playlistId:pid,pageToken});
       const chunk=(r?.items||[]).map(it=>it?.contentDetails?.videoId).filter(Boolean);
-      ids.push(...chunk); pageToken=r?.nextPageToken||''; if(!pageToken) break; busy(true,`取得中… ${ids.length}件`);
+      ids.push(...chunk); pageToken=r?.nextPageToken||''; if(!pageToken) break; busy(true,t('status.fetching')+` ${ids.length}`);
     }
     return ids.slice(0,Math.min(maxCount,MAX_FETCH));
   }
@@ -440,7 +586,7 @@
       while(true){
         const my=cursor++; if(my>=chunks.length) break;
         const ids=chunks[my].join(',');
-        busy(true,`詳細取得中… ${Math.min((my+1)*50,videoIds.length)}/${videoIds.length}`);
+        busy(true,t('status.fetching')+` ${Math.min((my+1)*50,videoIds.length)}/${videoIds.length}`);
         const r=await jsonp('videos',{ids});
         for(const it of (r?.items||[])){
           const st=it.statistics||{}, sn=it.snippet||{};
@@ -486,7 +632,6 @@
     }
   }
 
-  // 見やすいメタ表示：個別 <span class="mi"><b>ラベル</b> 値</span> を並べる
   function makeMetaItem(label, value){
     const s = document.createElement('span');
     s.className = 'mi';
@@ -498,7 +643,7 @@
   }
 
   function renderRows(rows){
-    listEl.innerHTML=''; chipGot.textContent=`取得件数：${rows.length}`;
+    listEl.innerHTML=''; chipGot.textContent=t('stat.got',{n:rows.length.toLocaleString(LANG==='ja'?'ja-JP':'en-US')});
     const frag=document.createDocumentFragment();
     rows.forEach((r)=>{
       const li=document.createElement('li'); li.className='v';
@@ -509,10 +654,10 @@
       li.appendChild(a);
 
       const meta=document.createElement('div'); meta.className='meta';
-      meta.appendChild(makeMetaItem('再生', r.viewCount!=null ? `${fmtNum(r.viewCount)} 回` : '-'));
-      if (r.likeCount!=null)    meta.appendChild(makeMetaItem('高評価', `${fmtNum(r.likeCount)}`));
-      if (r.commentCount!=null) meta.appendChild(makeMetaItem('コメント', `${fmtNum(r.commentCount)}`));
-      meta.appendChild(makeMetaItem('日付', r.publishedAt? new Date(r.publishedAt).toLocaleDateString('ja-JP') : '-'));
+      meta.appendChild(makeMetaItem(t('meta.views'), r.viewCount!=null ? `${fmtNum(r.viewCount)}${t('meta.viewsUnit')}` : '-'));
+      if (r.likeCount!=null)    meta.appendChild(makeMetaItem(t('meta.likes'), `${fmtNum(r.likeCount)}`));
+      if (r.commentCount!=null) meta.appendChild(makeMetaItem(t('meta.comments'), `${fmtNum(r.commentCount)}`));
+      meta.appendChild(makeMetaItem(t('meta.date'), r.publishedAt? new Date(r.publishedAt).toLocaleDateString(I18N[LANG].locale) : '-'));
 
       li.appendChild(meta);
       frag.appendChild(li);
@@ -521,13 +666,10 @@
   }
 
   function setChannel(ch,got=0){
-    if(!ch){ chPanel.style.display='none'; chipGot.textContent='取得件数：0'; return; }
+    if(!ch){ chPanel.style.display='none'; chipGot.textContent=t('stat.got',{n:0}); return; }
     chPanel.style.display='';
     chTitle.innerHTML=`<a href="${ch.url}" target="_blank" rel="noopener noreferrer">${esc(ch.title||'')}</a>`;
-    chipSubs.textContent=`登録者数：${fmtNum(ch.subscriberCount)}人`;
-    chipViews.textContent=`総再生回数：${fmtNum(ch.viewCount)}回`;
-    chipCount.textContent=`動画数：${fmtNum(ch.videoCount)}本`;
-    chipGot.textContent=`取得件数：${got}`;
+    applyI18nStats(ch, got);
   }
   </script>
 </body>
