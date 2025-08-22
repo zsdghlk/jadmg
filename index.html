@@ -23,20 +23,14 @@
     :root{
       --bg:#ffffff; --panel:#ffffff; --text:#111111; --muted:#4a4a4a; --bd:#dcdfe4;
       --accent:#0b66ff; --accent-2:#094fd1; --ok:#11895a; --warn:#b25a00;
-      --chip-bg:#ffffff;          /* チップ背景（Light） */
-      --chip-fg:#111111;          /* チップ文字色（Light） */
-      --link:#0b57d0;             /* 強コントラストリンク（Light） */
-      --tap:48px;                 /* 最小タッチサイズ */
-      --radius:14px;              /* 角丸 */
-      --shadow:0 1px 2px rgba(0,0,0,.08);
+      --chip-bg:#ffffff; --chip-fg:#111111; --link:#0b57d0;
+      --tap:48px; --radius:14px; --shadow:0 1px 2px rgba(0,0,0,.08);
     }
     @media (prefers-color-scheme: dark){
       :root{
         --bg:#111418; --panel:#161a20; --text:#f5f7fa; --muted:#b5bcc6; --bd:#283041;
         --accent:#5c96ff; --accent-2:#3c78f2; --ok:#1db47a; --warn:#ffb020;
-        --chip-bg:#0e1117;         /* チップ背景（Dark） */
-        --chip-fg:#e9eef6;         /* チップ文字色（Dark） */
-        --link:#8ab4ff;            /* 強コントラストリンク（Dark） */
+        --chip-bg:#0e1117; --chip-fg:#e9eef6; --link:#8ab4ff;
         --shadow:0 1px 2px rgba(0,0,0,.35);
       }
     }
@@ -146,7 +140,7 @@
       border-radius:6px;
     }
 
-    /* メタ表示（再生/高評価/コメント/日付）— 行チップで見やすく */
+    /* メタ表示（再生/コメント/高評価/日付）— 行チップで見やすく */
     .meta{
       margin-top:8px;
       display:flex;
@@ -364,9 +358,7 @@
     const map = ['none','viewsDesc','viewsAsc','likesDesc','likesAsc','commentsDesc','commentsAsc','newest','oldest'];
     map.forEach((k,i)=>{ if(opts[i]) opts[i].textContent = t('sortOpts.'+k); });
 
-    const runBtn = document.getElementById('run');
-    runBtn.textContent = t('fetch');
-
+    document.getElementById('run').textContent = t('fetch');
     document.getElementById('helpNote').innerHTML = t('helpNote');
   }
 
@@ -642,8 +634,11 @@
     return s;
   }
 
+  // 表示順を「再生 → コメント → 高評価 → 日付」に固定
   function renderRows(rows){
-    listEl.innerHTML=''; chipGot.textContent=t('stat.got',{n:rows.length.toLocaleString(LANG==='ja'?'ja-JP':'en-US')});
+    listEl.innerHTML='';
+    chipGot.textContent = t('stat.got',{n:rows.length.toLocaleString(LANG==='ja'?'ja-JP':'en-US')});
+
     const frag=document.createDocumentFragment();
     rows.forEach((r)=>{
       const li=document.createElement('li'); li.className='v';
@@ -654,10 +649,30 @@
       li.appendChild(a);
 
       const meta=document.createElement('div'); meta.className='meta';
-      meta.appendChild(makeMetaItem(t('meta.views'), r.viewCount!=null ? `${fmtNum(r.viewCount)}${t('meta.viewsUnit')}` : '-'));
-      if (r.likeCount!=null)    meta.appendChild(makeMetaItem(t('meta.likes'), `${fmtNum(r.likeCount)}`));
-      if (r.commentCount!=null) meta.appendChild(makeMetaItem(t('meta.comments'), `${fmtNum(r.commentCount)}`));
-      meta.appendChild(makeMetaItem(t('meta.date'), r.publishedAt? new Date(r.publishedAt).toLocaleDateString(I18N[LANG].locale) : '-'));
+
+      // ① 再生
+      meta.appendChild(makeMetaItem(
+        t('meta.views'),
+        r.viewCount!=null ? `${fmtNum(r.viewCount)}${t('meta.viewsUnit')}` : '-'
+      ));
+
+      // ② コメント（常に表示）
+      meta.appendChild(makeMetaItem(
+        t('meta.comments'),
+        r.commentCount!=null ? `${fmtNum(r.commentCount)}` : '-'
+      ));
+
+      // ③ 高評価（常に表示。APIが返さない環境では "-"）
+      meta.appendChild(makeMetaItem(
+        t('meta.likes'),
+        r.likeCount!=null ? `${fmtNum(r.likeCount)}` : '-'
+      ));
+
+      // ④ 日付
+      meta.appendChild(makeMetaItem(
+        t('meta.date'),
+        r.publishedAt ? new Date(r.publishedAt).toLocaleDateString(I18N[LANG].locale) : '-'
+      ));
 
       li.appendChild(meta);
       frag.appendChild(li);
