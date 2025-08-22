@@ -1,50 +1,11 @@
 # YouTube Info Fetcher (GAS Proxy + Frontend)
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Demo](https://img.shields.io/badge/demo-online-brightgreen)](https://zsdghlk.github.io/jadmg/)
-[![Made with GAS](https://img.shields.io/badge/made%20with-Google%20Apps%20Script-orange)](https://developers.google.com/apps-script)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)  
+[![Demo](https://img.shields.io/badge/demo-online-brightgreen)](https://zsdghlk.github.io/jadmg/)  
+[![Made with GAS](https://img.shields.io/badge/made%20with-Google%20Apps%20Script-orange)](https://developers.google.com/apps-script)  
 
+Fetch YouTube data in one click.  
 YouTubeの情報を、ワンクリックで一括取得。  
-Fetch YouTube data in one click.
-
----
-
-## 🇯🇵 日本語版
-
-### 📖 概要
-YouTubeチャンネル / プレイリスト / 動画の情報を一括取得するツールです。  
-Google Apps Script をバックエンドに利用し、APIキーを安全に管理しつつ、フロントから簡単に使えます。  
-
-### ✨ 機能一覧
-- 🔑 APIキーを安全に管理（Script Propertiesに保存、フロントへ露出なし）
-- 📊 メタ情報の取得と表示（再生数 / 高評価 / コメント / 公開日）
-- 🎨 UI最適化（ライト/ダーク対応、高コントラスト、チップUI）
-- 🔍 並び替え機能（再生数 / 高評価 / コメント / 公開日 / 取得順）
-- 📱 スマホ対応（最小タッチ48px、フォント16px以上）
-- 🛡 セキュリティ対策（CSP・PWA対応・取得上限300件）
-
-### 🎮 このサイトの使い方（ユーザー向け）
-1. [デモページ](https://zsdghlk.github.io/jadmg/) を開く  
-2. 入力欄に YouTube のURLを貼る  
-   - チャンネルURL  
-   - 動画URL  
-   - プレイリストURL  
-3. 「取得」ボタンをクリック  
-4. 動画リストが表示されます  
-   - タイトルとリンク  
-   - 再生数 / 高評価 / コメント / 公開日（チップ形式で表示）  
-   - 並び替え機能も利用可能  
-
-### ⚡ セットアップ方法（開発者向け）
-1. Google Apps Script に `gas/code.js` と `gas/appsscript.json` を配置  
-2. プロジェクトの Script Properties に `YT_API_KEY` を設定  
-3. Webアプリとしてデプロイ（公開権限: 全員 / 匿名ユーザー）  
-4. `index.html` を GitHub Pages 等で公開し、GAS `/exec` エンドポイントを指定  
-
-### 🔑 APIキーについて（重要）
-- 本リポジトリには APIキーは含まれていません  
-- 各自の Google Cloud Console で **YouTube Data API v3** を有効化し、取得した APIキーを Google Apps Script の Script Properties に保存してください  
-- 公開デモ版を運用する場合は、取得件数制限（例: 300件）やキーのローテーションを行うことを推奨します  
 
 ---
 
@@ -84,6 +45,45 @@ It uses Google Apps Script as a backend proxy to keep API keys secure while prov
 - This repository does **NOT** include any API keys  
 - To use it, enable **YouTube Data API v3** in your own Google Cloud Console, generate an API key, and store it in Google Apps Script Script Properties  
 - If you host a public demo, it is strongly recommended to enforce limits (e.g., 300 items), rotate keys regularly, and monitor usage  
+
+---
+
+## 🇯🇵 日本語版
+
+### 📖 概要
+YouTubeチャンネル / プレイリスト / 動画の情報を一括取得するツールです。  
+Google Apps Script をバックエンドに利用し、APIキーを安全に管理しつつ、フロントから簡単に使えます。  
+
+### ✨ 機能一覧
+- 🔑 APIキーを安全に管理（Script Propertiesに保存、フロントへ露出なし）  
+- 📊 メタ情報の取得と表示（再生数 / 高評価 / コメント / 公開日）  
+- 🎨 UI最適化（ライト/ダーク対応、高コントラスト、チップUI）  
+- 🔍 並び替え機能（再生数 / 高評価 / コメント / 公開日 / 取得順）  
+- 📱 スマホ対応（最小タッチ48px、フォント16px以上）  
+- 🛡 セキュリティ対策（CSP・PWA対応・取得上限300件）  
+
+### 🎮 このサイトの使い方（ユーザー向け）
+1. [デモページ](https://zsdghlk.github.io/jadmg/) を開く  
+2. 入力欄に YouTube のURLを貼る  
+   - チャンネルURL  
+   - 動画URL  
+   - プレイリストURL  
+3. 「取得」ボタンをクリック  
+4. 動画リストが表示されます  
+   - タイトルとリンク  
+   - 再生数 / 高評価 / コメント / 公開日（チップ形式で表示）  
+   - 並び替え機能も利用可能  
+
+### ⚡ セットアップ方法（開発者向け）
+1. Google Apps Script に `gas/code.js` と `gas/appsscript.json` を配置  
+2. プロジェクトの Script Properties に `YT_API_KEY` を設定  
+3. Webアプリとしてデプロイ（公開権限: 全員 / 匿名ユーザー）  
+4. `index.html` を GitHub Pages 等で公開し、GAS `/exec` エンドポイントを指定  
+
+### 🔑 APIキーについて（重要）
+- 本リポジトリには APIキーは含まれていません  
+- 各自の Google Cloud Console で **YouTube Data API v3** を有効化し、取得した APIキーを Google Apps Script の Script Properties に保存してください  
+- 公開デモ版を運用する場合は、取得件数制限（例: 300件）やキーのローテーションを行うことを推奨します  
 
 ---
 
