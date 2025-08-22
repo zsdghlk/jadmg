@@ -1,6 +1,6 @@
 # YouTube Info Fetcher (GAS Proxy + Frontend)
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)  
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)  
 [![Demo](https://img.shields.io/badge/demo-online-brightgreen)](https://zsdghlk.github.io/jadmg/)  
 [![Made with GAS](https://img.shields.io/badge/made%20with-Google%20Apps%20Script-orange)](https://developers.google.com/apps-script)  
 
